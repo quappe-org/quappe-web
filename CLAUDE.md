@@ -2,73 +2,67 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## What this repo is
+
+**quappe-web** is the Quappe **browser UI** — a presentation-only SvelteKit app.
+It has **no domain logic and no database**: it renders and calls the
+`quappe-service` API. Keeping it presentation-only is deliberate (the API is the
+contract, and other clients — CLI, app, analytics — consume the same service).
+
 ## Commands
 
-- `npm run dev` — start Vite dev server (default http://localhost:5173). Seeds ~200 theses on first authenticated request.
-- `npm run dev:all` — same, but also starts `ollama serve` in parallel (needed for `/my` and `/pulse` reports).
-- `npm run build` / `npm run preview` — production build + local preview.
-- `npm run check` — `svelte-kit sync` + `svelte-check` against `tsconfig.json`. This is the type-check equivalent; there is no separate lint or test suite.
-- `npm run paraglide:compile` — regenerate `src/lib/paraglide/` after editing `messages/*.json`. Also runs automatically via the `prepare` script.
-- `QUAPPE_SEED_COUNT=100000 npm run dev` — override seed size for stress tests. `scripts/stress.ts` (via `node --experimental-strip-types`) runs a headless million-thesis load.
-- `QUAPPE_DB_PATH=/tmp/foo.db npm run dev` — point at a different SQLite file. Default is `.data/quappe.db`.
+Needs a running `quappe-service` (default `http://localhost:5273`).
 
-Ollama defaults: `OLLAMA_URL=http://127.0.0.1:11434`, `OLLAMA_MODEL=llama3.1:8b`, `OLLAMA_TIMEOUT=60000`. Without Ollama, `/my` and `/pulse` still render with a "LLM nicht verfügbar" fallback — nothing else depends on it.
+- `npm run dev` — start the UI on http://localhost:5173. Set `PRIVATE_SERVICE_URL` to point the proxy at the service.
+- `npm run build` / `npm run preview` — production build + preview.
+- `npm run check` — `svelte-kit sync` + `svelte-check`. Type-check; no separate lint/test.
+- `npm run paraglide:compile` — regenerate `src/lib/paraglide/` after editing `messages/*.json`.
+
+Typical local flow: start the service first, then
+`PRIVATE_SERVICE_URL=http://localhost:5273 npm run dev` here.
+
+## How it talks to the service
+
+`src/routes/api/[...path]/+server.ts` is a **reverse proxy**: every
+`fetch('/api/…')` in the UI (page `load` functions, client stores) is forwarded
+to `PRIVATE_SERVICE_URL`. Why a proxy rather than direct cross-origin calls:
+
+- the browser stays same-origin — no CORS;
+- the httpOnly identity cookie stays first-party and is forwarded transparently;
+- every existing `fetch('/api/...')` keeps working unchanged.
+
+`PRIVATE_SERVICE_URL` is a server-only env var (`$env/dynamic/private`), so in
+production it can point at an internal k8s address without leaking to clients.
 
 ## Architecture
 
-### Data layer — SQLite façade
+### Data flow
 
-State lives in `.data/quappe.db` (better-sqlite3, synchronous, WAL journal). The full architecture is intentionally simple: **`src/lib/stores/data.ts` is a façade with ~38 exports that are the only surface every consumer imports.** Its internals delegate to `src/lib/server/db/*`.
-
-- `src/lib/server/db/index.ts` — lazy singleton `getDb()`, module-scoped prepared-statement cache in `prepare(sql)`, `withTransaction(fn)`, `isDbEmpty()`. Schema in `schema.sql` runs on first `getDb()` call. `hooks.server.ts` eagerly calls `getDb()` at import time so tables exist before any handler runs.
-- `theses.ts`, `arguments.ts`, `votes.ts`, `embeddings.ts` — one module per table, each exposing `dbGet*/dbInsert*/dbUpdate*/dbDelete*` helpers built on cached prepared statements.
-- `mappers.ts` — row↔domain conversions (`rowToThesis(row, votes)` etc.) and `Float32Array ↔ Buffer` for embedding BLOBs. Reads always copy bytes into a fresh `ArrayBuffer` so the DB row buffer is never shared.
-
-Non-obvious decisions to preserve:
-
-- **Single `votes` table** with `(target_type, target_id, user_id)` PK — argument and thesis votes coexist so `getVotesByUserSince` is one query. FK integrity is enforced at the application layer (`deleteThesis`/`deleteArgument` explicitly clear votes); `arguments.thesis_id` has `ON DELETE CASCADE` but the votes cleanup for cascaded arguments is manual.
-- **Tier is derived, not stored.** There are no separate hot/warm/cold tables — every "tier" query filters by `lifecycle_state`. Hot = `seedling|discussed|contested|crystallized`, warm = `faded`, cold = `dormant`.
-- **Embedding warm cache.** `data.ts` holds `Map<string, Float32Array>` mirrors that lazy-load from `dbGetAllEmbeddings('thesis'|'argument')` on first access. Writes (`setThesisEmbedding` / `setArgumentEmbedding`) are write-through (Map + DB). Semantic search reads only from the Map.
-- **In-memory derived caches stay in `data.ts`** (30 s TTL): `_heatCache`, `_argCountsCache`, `_activityCache`, `_dataVersion`/`bumpVersion()`. Every write path bumps the version to invalidate them.
-- **Seed gate.** `seedData(devUserId?)` returns immediately if `dbTierStats().total > 0`. When it runs, it builds all rows in memory, sorts arguments so fork sources come before their forks (self-FK on `arguments.forked_from_id`), and flushes in one `withTransaction`. The `seedOnce` guard in `dev-seed.ts` fires on the first authenticated request in dev.
-
-### Domain model (`src/lib/models/types.ts`)
-
-- `Thesis` has `lifecycle: LifecycleInfo` (state + `state_since` + `quality_score`) and `lang?` (2-letter ISO, filled by a nightly LLM backfill).
-- `Argument` has `stance: 'support' | 'reject'`, `attributes: ArgumentAttribute[]` (evidence type + optional URL), optional `forked_from_id`, and `categories?` filled asynchronously by an LLM job — arguments start uncategorised on purpose.
-- `Vote` has `weight` on a Fibonacci ladder (1, 2, 3, 5, 8). Weight 1 is free; extra weight is drawn from a daily weight pool. Daily budgets (3 stance buckets à 8 + a weight pool of 21) are enforced **server-side** in `src/lib/server/budget.ts`; `src/lib/server/limits.ts` holds length caps + rate limits. Identity is an anonymous server-minted **JWT** (`src/lib/server/identity.ts`).
-
-Lifecycle recomputation lives in `data.ts::reevaluateLifecycle(id)` (uses `models/lifecycle.ts`). It reads via DB, computes the new state, writes back with `dbUpdateThesisLifecycle`. Every mutating endpoint that could change activity calls it.
-
-### Server startup (`src/hooks.server.ts`)
-
-Four background loops kick off at module load, all fire-and-forget:
-
-1. **Embedding warmup + backfill** — waits for the Xenova model to warm, waits for `isSeeded()`, then embeds every thesis missing a vector. Semantic search only activates once this completes.
-2. **Pulse cache loop** — refreshes `/pulse` LLM output every 24 h; falls back gracefully if Ollama is down.
-3. **Argument categorization loop** — nightly, assigns `categories` to uncategorised arguments via LLM.
-4. **Language backfill loop** — nightly, fills `thesis.lang` for rows where it's null.
-
-The `handle` hook wraps every request in `paraglideMiddleware` (locale from URL prefix, cookie, `Accept-Language`, or `baseLocale`), then calls `ensureUserId(cookies)` — every non-asset request lands in handlers with a valid `event.locals.user_id` from a signed cookie. **Handlers never trust `author_id`/`user_id` fields from the request body.** API writes >32 KB are rejected before JSON parse.
-
-### i18n (Paraglide)
-
-- Base locale: `en`. Additional: `de`, `fr`, `es`. Messages in `messages/{locale}.json`, compiled into `src/lib/paraglide/` (git-ignored — regenerated by `prepare`).
-- URL strategy: EN is unprefixed, others get `/de/…`, `/fr/…`, `/es/…`. `src/hooks.ts` (client + server `reroute`) de-localizes the URL so SvelteKit's router matches the canonical route tree — the prefix stays in the browser URL only.
+- Pages load data in `+page.ts` universal `load` functions via `fetch('/api/...')` — which hits the proxy → the service.
+- Client stores (`src/lib/stores/*.svelte.ts`) hold **UI concerns only** (theme, complexity, budget mirror, activity, seen updates, a11y). They are browser-only. Server/domain state is always fetched.
+- **Contract types** the UI needs but that aren't core domain types live in `src/lib/models/contract.ts` (`ActivityDay`, `PulseBody`, log-viewer types). Core domain types are in `src/lib/models/*` (`types.ts`, `fibonacci.ts`, `variants.ts`, `lifecycle.ts`) — kept in sync with the service. Do NOT import anything from a `server`/DB module here (there is none).
 
 ### UI
 
-- SvelteKit 2 + Svelte 5 with **runes mode forced everywhere except `node_modules`** (see `vite.config.ts`). Use `$state`, `$derived`, `$effect`; do not use legacy stores syntax in new components.
-- No CSS framework, no UI library. Hand-written CSS with CSS variables.
-- Client-side state lives in `src/lib/stores/*.svelte.ts` (rune-based) for UI concerns (theme, complexity, budget, activity, seen updates). These are browser-only; server state is always fetched.
-- Hidden admin console at `/admin` (not linked in nav) shows a ring buffer of server events from `src/lib/stores/logger.ts`.
+- SvelteKit 2 + Svelte 5, **runes mode forced everywhere except `node_modules`** (see `vite.config.ts`). Use `$state`, `$derived`, `$effect`; no legacy store syntax in new components.
+- No CSS framework, no UI library. Hand-written CSS with CSS variables (`src/app.css`).
+- **Design language: editorial / calm, top-down** (no sidebar). Sticky top bar (brand · nav · actions), transient popovers for budget/slider/theme/menu, a centred reading column, serif headlines. See `.meta/.ui.skill` for the full spec + wireframes.
+- **Two reader-control axes:** amount (Fibonacci complexity slider) and density (author reading registers simple/prose/dense, slider-bound). Simple mode also reduces the vote UI (support/reject only, no neutral/weight, no variant picker).
+- **Themes** (rainbow/pastel/classic/unicorn/grays) and **accessibility modes** (invert, calm, high-contrast, reduce-motion) are two orthogonal axes, both in the header theme popover. Named by function, not diagnosis — see `.meta/.ui.skill` (don't "simplify" the naming back).
+
+### i18n (Paraglide)
+
+Base locale `en`, plus `de/fr/es`. Messages in `messages/{locale}.json`, compiled into `src/lib/paraglide/` (git-ignored — regenerated by `prepare`). **Strategy order is `cookie url preferredLanguage baseLocale`** (cookie-first) — this is deliberate: nav links are unprefixed, so cookie-first keeps the chosen language on navigation instead of falling back to `en`. `src/hooks.ts` de-localizes URLs for the router.
 
 ## Working in this codebase
 
-- **Do not reintroduce in-memory Maps for domain data.** The migration to SQLite was deliberate — every read and write goes through `data.ts` → `src/lib/server/db/*`. If a new query is needed, add a `dbGet*` helper alongside the others.
-- Consumer modules (`+server.ts` handlers, `hooks.server.ts`, `pulse.ts`, `similarity.ts`, `argument-categorization.ts`) only import from `$lib/stores/data`. Keep the façade's exports and signatures stable.
-- **UI stays presentation-only (split-ready).** Svelte components and client stores must NOT import `data.ts`, `src/lib/server/*`, or any DB module. The UI talks to the server exclusively through page `load` functions and `/api/*` endpoints. This keeps `quappe-web` cleanly separable from `quappe-service` later (see the "Quappe as a platform" north star in `.meta/.project`) — treat the API as the contract.
-- `better-sqlite3` is declared in Vite's `ssr.external` and `optimizeDeps.exclude`. If you add another native module, add it in both places.
-- ISO-8601 strings are the canonical timestamp format (they sort lexicographically, and `getActivityCalendar` relies on `iso.slice(0,10)`).
-- Domain design decisions are documented in `.meta/*.skill` files — update them when you change a decision.
-- **Embeddings & dependency advisories.** Semantic search uses `@huggingface/transformers` (the maintained successor to the archived `@xenova/transformers`) — server-side only, model `Xenova/multilingual-e5-small` (384-dim, q8-quantised), cached under `.cache/transformers`. This migration removed the critical protobufjs advisory. `npm audit` still flags `sharp` + `onnxruntime-node` (high), both transitive: `sharp` is never reached (we do text embeddings only, no image processing); the onnx advisory concerns loading *untrusted* models, while we load a fixed trusted one. Assessed as ~nil real exposure. Do not `npm audit fix --force` (downgrades the model, breaks search). `@huggingface/transformers` is in Vite's `ssr.external` + `optimizeDeps.exclude`.
+- **Presentation only.** No domain logic, no DB, no server-side data modules. If you need data, add/consume an API endpoint in `quappe-service` and fetch it.
+- Keep `contract.ts` in sync with the service's response shapes (the eventual OpenAPI spec is the source of truth).
+- ISO-8601 timestamp strings throughout.
+- Design decisions live in `.meta/*.skill` (esp. `.ui.skill`) — update them when you change a decision.
+
+## Platform context
+
+- **quappe-service** — API + DB + logic (the contract).
+- **quappe-web** — this repo: the browser UI.
+- **quappe-ops / quappe-insight / quappe-docs** — later.
