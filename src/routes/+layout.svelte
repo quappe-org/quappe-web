@@ -14,6 +14,8 @@
 	import { bootstrapUserId } from '$lib/stores/user';
 	import ComplexitySlider from '$lib/components/ComplexitySlider.svelte';
 	import Logo from '$lib/components/Logo.svelte';
+	import Wizard from '$lib/components/Wizard.svelte';
+	import { onboardingStore } from '$lib/stores/onboarding.svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -346,6 +348,10 @@
 		{@render children()}
 	</main>
 </div>
+
+{#if mounted && onboardingStore.open}
+	<Wizard />
+{/if}
 
 <style>
 	.app {

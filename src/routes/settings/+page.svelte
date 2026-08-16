@@ -6,6 +6,7 @@
 	import { localeStore } from '$lib/stores/locale.svelte';
 	import { onMount } from 'svelte';
 	import { m } from '$lib/paraglide/messages';
+	import { onboardingStore } from '$lib/stores/onboarding.svelte';
 
 	let userId = $state('');
 	$effect(() => {
@@ -209,6 +210,14 @@
 			<h3 class="setting-label">{m.settings_about_title()}</h3>
 			<p class="setting-hint">{m.settings_about_hint()}</p>
 		</div>
+	</div>
+
+	<div class="card stack">
+		<div class="setting-group">
+			<h3 class="setting-label">{m.wizard_settings_title()}</h3>
+			<p class="setting-hint">{m.wizard_settings_hint()}</p>
+		</div>
+		<button class="btn btn-sm" style="width: fit-content" onclick={() => onboardingStore.reopen()}>{m.wizard_settings_button()}</button>
 	</div>
 </section>
 
