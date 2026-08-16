@@ -20,7 +20,7 @@ PRIVATE_SERVICE_URL=http://localhost:5273 npm run dev   # http://localhost:5173
 ```
 
 **Kubernetes (production target):** deploy the published image
-`DOCKERHUB_USER/quappe-web` as a stateless Deployment with `PRIVATE_SERVICE_URL`
+`quappeorg/quappe-web` as a stateless Deployment with `PRIVATE_SERVICE_URL`
 pointing at the in-cluster service DNS, behind a TLS ingress. Topology and
 manifests: **[quappe-docs / running.md](https://github.com/quappe-org/quappe-docs/blob/main/running.md)**
 (Docker packaging + CI details there too).
