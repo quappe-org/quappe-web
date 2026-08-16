@@ -12,21 +12,18 @@ modes. i18n (en/de/fr/es via Paraglide).
 
 Needs a running `quappe-service` (default `http://localhost:5273`).
 
+**Local (development):**
+
 ```bash
 npm install
 PRIVATE_SERVICE_URL=http://localhost:5273 npm run dev   # http://localhost:5173
 ```
 
-Or with Docker:
-
-```bash
-docker build -t quappe-web .
-docker run -p 8080:3000 -e PRIVATE_SERVICE_URL=http://host.docker.internal:3000 quappe-web
-```
-
-CI pushes images to Docker Hub on `main` + version tags (`v*`). Full platform
-setup — local, build, Docker, Kubernetes — is in the runbook:
-**[quappe-docs / running.md](https://github.com/quappe-org/quappe-docs/blob/main/running.md)**.
+**Kubernetes (production target):** deploy the published image
+`DOCKERHUB_USER/quappe-web` as a stateless Deployment with `PRIVATE_SERVICE_URL`
+pointing at the in-cluster service DNS, behind a TLS ingress. Topology and
+manifests: **[quappe-docs / running.md](https://github.com/quappe-org/quappe-docs/blob/main/running.md)**
+(Docker packaging + CI details there too).
 
 ## How it talks to the service
 
