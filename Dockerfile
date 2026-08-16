@@ -7,10 +7,13 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+# --ignore-scripts: the `prepare` hook needs project files not copied yet.
+RUN npm ci --ignore-scripts
 
 COPY . .
-RUN npm run build \
+RUN npm run paraglide:compile \
+	&& npx svelte-kit sync \
+	&& npm run build \
 	&& npm prune --omit=dev
 
 # ---- runtime ----
