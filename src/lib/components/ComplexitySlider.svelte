@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ComplexitySettings } from '$lib/models/types';
 	import { FIB_THESES, FIB_ARGUMENTS, FIB_RELATED } from '$lib/models/fibonacci';
+	import { complexityStore } from '$lib/stores/complexity.svelte';
 
 	let { onchange }: { onchange: (settings: ComplexitySettings) => void } = $props();
 
@@ -8,11 +9,18 @@
 	// dimensions in lockstep; shorter ladders clamp to their last value so the
 	// steps stay aligned. Default lands on step 2 (theses 8 · args 3 · related 8).
 	const STEP_COUNT = FIB_THESES.length; // 7 steps: 3,5,8,13,21,34,55
-	let step = $state(2);
 
 	function pick(ladder: readonly number[], i: number): number {
 		return ladder[Math.min(i, ladder.length - 1)];
 	}
+
+	// The slider position is DERIVED from the shared store, not held locally, so
+	// that other writers (the onboarding wizard, a future settings control) move
+	// the thumb too. Map the store's max_theses back to its Fibonacci index.
+	let step = $derived.by(() => {
+		const i = FIB_THESES.indexOf(complexityStore.settings.max_theses);
+		return i >= 0 ? i : 2; // fall back to the default step if no exact match
+	});
 
 	let settings = $derived<ComplexitySettings>({
 		max_theses: pick(FIB_THESES, step),
@@ -20,13 +28,14 @@
 		max_related: pick(FIB_RELATED, step)
 	});
 
-	$effect(() => {
-		onchange(settings);
-	});
-
 	function handleInput(e: Event) {
 		const target = e.target as HTMLInputElement;
-		step = parseInt(target.value, 10);
+		const next = parseInt(target.value, 10);
+		onchange({
+			max_theses: pick(FIB_THESES, next),
+			max_arguments: pick(FIB_ARGUMENTS, next),
+			max_related: pick(FIB_RELATED, next)
+		});
 	}
 </script>
 
