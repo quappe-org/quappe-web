@@ -209,6 +209,7 @@
 		<div class="setting-group">
 			<h3 class="setting-label">{m.settings_about_title()}</h3>
 			<p class="setting-hint">{m.settings_about_hint()}</p>
+			<p class="setting-value mono">v{__APP_VERSION__}</p>
 		</div>
 	</div>
 
