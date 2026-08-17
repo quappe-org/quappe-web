@@ -810,12 +810,14 @@
 			gap: 0;
 			overflow-x: auto;
 			scrollbar-width: none;
+			min-width: 0;
+			flex: 1;
 		}
 		.topnav::-webkit-scrollbar { display: none; }
 		.topnav-item { padding: 0.4rem 0.5rem; }
 		.action-new-label { display: none; }
 		.action-new { width: 2.1rem; padding: 0; }
 		.main { padding: 1.5rem 1rem 3rem; }
-		.popover { position: fixed; top: auto; bottom: 0; left: 0; right: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; min-width: 0; }
+		.popover { position: fixed; top: auto; bottom: 0; left: 0; right: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; min-width: 0; max-height: 70dvh; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom, 0); }
 	}
 </style>

@@ -286,6 +286,7 @@
 			voting={voting}
 			compact
 			simple={simpleMode}
+			hideNeutral
 			oncast={castVote}
 		/>
 		<div class="argument-actions">

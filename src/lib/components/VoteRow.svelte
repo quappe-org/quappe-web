@@ -12,6 +12,7 @@
 		compact?: boolean;
 		showButtons?: boolean;
 		simple?: boolean; // reduced UI: support/reject only, no neutral, no weight
+		hideNeutral?: boolean; // hide neutral button/count (arguments don't support neutral votes)
 		oncast?: (type: VoteType, weight: number) => void;
 	}
 
@@ -23,6 +24,7 @@
 		compact = false,
 		showButtons = true,
 		simple = false,
+		hideNeutral = false,
 		oncast
 	}: Props = $props();
 
@@ -51,7 +53,7 @@
 	<div class="vote-counts">
 		<span class="vc support" title="{summary.support} weighted support"><span class="sign">+</span>{abbreviateNumber(summary.support)}</span>
 		<span class="vc reject" title="{summary.reject} weighted reject"><span class="sign">−</span>{abbreviateNumber(summary.reject)}</span>
-		{#if !simple}
+		{#if !simple && !hideNeutral}
 			<span class="vc neutral" title="{summary.neutral} weighted neutral"><span class="sign">~</span>{abbreviateNumber(summary.neutral)}</span>
 		{/if}
 	</div>
@@ -86,7 +88,7 @@
 				<span class="weight-badge">×{currentWeight}</span>
 			{/if}
 		</button>
-		{#if !simple}
+		{#if !simple && !hideNeutral}
 			<button
 				class="vb vb-neutral"
 				class:active={currentVote === 'neutral'}

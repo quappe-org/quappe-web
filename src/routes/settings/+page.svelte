@@ -418,4 +418,17 @@
 		border-color: var(--color-primary);
 		cursor: default;
 	}
+
+	@media (max-width: 480px) {
+		.bound-label {
+			min-width: 0;
+			width: 100%;
+		}
+		.bound-controls {
+			width: 100%;
+		}
+		.bound-controls input {
+			width: 3.5rem;
+		}
+	}
 </style>
