@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { getUserId } from '$lib/stores/user';
-	import { categoriesStore } from '$lib/stores/categories.svelte';
 	import { complexityBoundsStore } from '$lib/stores/complexity-bounds.svelte';
 	import { getLocale, setLocale, locales, type Locale } from '$lib/paraglide/runtime';
 	import { localeStore } from '$lib/stores/locale.svelte';
@@ -28,25 +27,6 @@
 		if (locale === activeLocale) return;
 		setLocale(locale);
 		localeStore.refresh();
-	}
-
-	// Category management
-	let newCategory = $state('');
-
-	function addCategory() {
-		const cat = newCategory.trim().toLowerCase();
-		if (cat) {
-			categoriesStore.add(cat);
-			newCategory = '';
-		}
-	}
-
-	function removeCategory(cat: string) {
-		categoriesStore.remove(cat);
-	}
-
-	function resetCategories() {
-		categoriesStore.reset();
 	}
 
 	// Complexity bounds
@@ -175,38 +155,6 @@
 
 	<div class="card stack">
 		<div class="setting-group">
-			<div class="setting-header">
-				<h3 class="setting-label">{m.settings_categories_title()}</h3>
-				<button class="btn btn-sm" onclick={resetCategories}>{m.settings_bounds_reset()}</button>
-			</div>
-			<p class="setting-hint">{m.settings_categories_hint()}</p>
-		</div>
-
-		<div class="categories-list">
-			{#each categoriesStore.list as cat}
-				<div class="category-item">
-					<span class="tag">{cat}</span>
-					<button class="remove-btn" onclick={() => removeCategory(cat)} title={m.settings_categories_remove_title()}>&times;</button>
-				</div>
-			{/each}
-		</div>
-
-		<form class="add-category-form" onsubmit={(e) => { e.preventDefault(); addCategory(); }}>
-			<input type="text" bind:value={newCategory} placeholder={m.settings_categories_new_placeholder()} class="category-input" />
-			<button class="btn btn-primary btn-sm" type="submit" disabled={!newCategory.trim()}>{m.settings_categories_add()}</button>
-		</form>
-	</div>
-
-	<div class="card stack">
-		<div class="setting-group">
-			<h3 class="setting-label">{m.settings_admin_title()}</h3>
-			<p class="setting-hint">{m.settings_admin_hint()}</p>
-		</div>
-		<a href="/admin" class="admin-link">{m.settings_admin_link()}</a>
-	</div>
-
-	<div class="card stack">
-		<div class="setting-group">
 			<h3 class="setting-label">{m.settings_about_title()}</h3>
 			<p class="setting-hint">{m.settings_about_hint()}</p>
 			<p class="setting-value mono">v{__APP_VERSION__}</p>
@@ -277,50 +225,6 @@
 		width: fit-content;
 	}
 
-	.categories-list {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-	}
-
-	.category-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-	}
-
-	.remove-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.25rem;
-		height: 1.25rem;
-		border-radius: 50%;
-		border: none;
-		background: var(--color-reject-bg);
-		color: var(--color-reject);
-		font-size: var(--text-base);
-		cursor: pointer;
-		line-height: 1;
-		transition: background var(--transition-fast);
-	}
-
-	.remove-btn:hover {
-		background: var(--color-reject);
-		color: white;
-	}
-
-	.add-category-form {
-		display: flex;
-		gap: 0.5rem;
-		align-items: center;
-	}
-
-	.category-input {
-		flex: 1;
-		max-width: 250px;
-	}
-
 	.bounds-grid {
 		display: flex;
 		flex-direction: column;
@@ -376,16 +280,6 @@
 	.hard-limits {
 		font-size: var(--text-xs);
 		color: var(--color-text-light);
-	}
-
-	.admin-link {
-		font-size: var(--text-sm);
-		font-weight: 500;
-		color: var(--color-primary);
-		text-decoration: none;
-	}
-	.admin-link:hover {
-		text-decoration: underline;
 	}
 
 	.pill-group {
