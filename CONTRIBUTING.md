@@ -72,7 +72,6 @@ the same terms as the project: **PolyForm Noncommercial 1.0.0**
 
 ## Known advisories
 
-`npm audit` reports a few issues transitively via `@xenova/transformers`
-(the server-side embedding model). These are assessed and accepted for the MVP
-— do not "fix" them with `npm audit fix --force` (it downgrades the model and
-breaks semantic search). See `CLAUDE.md` for the reasoning.
+`npm audit` reports a few issues transitively via `@huggingface/transformers`.
+These are assessed and accepted for the MVP — do not "fix" them with
+`npm audit fix --force`. See `CLAUDE.md` for the reasoning.
