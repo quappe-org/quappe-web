@@ -8,6 +8,12 @@
 	let loading = $state(true);
 	let newCategory = $state('');
 
+	interface UserStats {
+		total_users: number;
+		daily: { day: string; voters: number; votes: number }[];
+	}
+	let stats = $state<UserStats | null>(null);
+
 	onMount(async () => {
 		const res = await fetch('/api/admin/banner');
 		if (res.ok) {
@@ -15,6 +21,11 @@
 			bannerText = data.text ?? '';
 		}
 		loading = false;
+
+		const statsRes = await fetch('/api/admin/users?days=30');
+		if (statsRes.ok) {
+			stats = await statsRes.json();
+		}
 	});
 
 	async function saveBanner() {
@@ -48,6 +59,42 @@
 
 <section class="stack-lg">
 	<h1 class="page-title">Admin</h1>
+
+	<div class="card stack">
+		<div class="setting-group">
+			<h3 class="setting-label">Users & Activity</h3>
+			<p class="setting-hint">Anonymous identities leave a trace once they vote. Totals reflect distinct voters.</p>
+		</div>
+		{#if stats}
+			<div class="stat-total">
+				<span class="stat-num">{stats.total_users}</span>
+				<span class="stat-label">total users (distinct voters)</span>
+			</div>
+			<table class="stat-table">
+				<thead>
+					<tr>
+						<th>Day</th>
+						<th class="num">Voters</th>
+						<th class="num">Votes</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each stats.daily as row}
+						<tr>
+							<td>{row.day}</td>
+							<td class="num">{row.voters}</td>
+							<td class="num">{row.votes}</td>
+						</tr>
+					{/each}
+					{#if stats.daily.length === 0}
+						<tr><td colspan="3" class="empty">No votes yet.</td></tr>
+					{/if}
+				</tbody>
+			</table>
+		{:else}
+			<p class="setting-hint">Loading…</p>
+		{/if}
+	</div>
 
 	<div class="card stack">
 		<div class="setting-group">
@@ -109,6 +156,59 @@
 		font-family: var(--font-serif);
 		font-size: 1.5rem;
 		font-weight: 600;
+	}
+
+	.stat-total {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+	}
+
+	.stat-num {
+		font-size: var(--text-2xl);
+		font-weight: 700;
+		font-family: var(--font-mono);
+		color: var(--color-primary);
+	}
+
+	.stat-label {
+		font-size: var(--text-sm);
+		color: var(--color-text-muted);
+	}
+
+	.stat-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: var(--text-sm);
+	}
+
+	.stat-table th,
+	.stat-table td {
+		padding: 0.35rem 0.6rem;
+		text-align: left;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.stat-table th {
+		font-size: var(--text-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-text-muted);
+		font-weight: 600;
+	}
+
+	.stat-table td {
+		font-family: var(--font-mono);
+	}
+
+	.stat-table .num {
+		text-align: right;
+	}
+
+	.stat-table .empty {
+		text-align: center;
+		color: var(--color-text-light);
+		font-family: inherit;
 	}
 
 	.setting-header {
