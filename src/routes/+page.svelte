@@ -73,6 +73,7 @@
 	// ---- Filter ----
 	let selectedFilter = $state<Category | null>(null);
 	let selectedHashtag = $state<string | null>(null);
+	let voteFilter = $state<'all' | 'voted' | 'not-voted'>('all');
 
 	let categoryCounts = $derived.by(() => {
 		const counts = new Map<Category, number>();
@@ -129,6 +130,14 @@
 		let filtered = allTheses;
 		if (selectedFilter) filtered = filtered.filter((t) => t.categories.includes(selectedFilter!));
 		if (selectedHashtag) filtered = filtered.filter((t) => (t.hashtags ?? []).includes(selectedHashtag!));
+		if (voteFilter !== 'all') {
+			const userId = getUserId();
+			if (voteFilter === 'voted') {
+				filtered = filtered.filter((t) => t.votes.some((v) => v.user_id === userId));
+			} else {
+				filtered = filtered.filter((t) => !t.votes.some((v) => v.user_id === userId));
+			}
+		}
 		return filtered.slice(0, complexityStore.settings.max_theses);
 	});
 
@@ -136,6 +145,14 @@
 		let filtered = allTheses;
 		if (selectedFilter) filtered = filtered.filter((t) => t.categories.includes(selectedFilter!));
 		if (selectedHashtag) filtered = filtered.filter((t) => (t.hashtags ?? []).includes(selectedHashtag!));
+		if (voteFilter !== 'all') {
+			const userId = getUserId();
+			if (voteFilter === 'voted') {
+				filtered = filtered.filter((t) => t.votes.some((v) => v.user_id === userId));
+			} else {
+				filtered = filtered.filter((t) => !t.votes.some((v) => v.user_id === userId));
+			}
+		}
 		return filtered.length;
 	});
 
@@ -556,6 +573,11 @@
 						{#if selectedFilter}{selectedFilter}{/if}{#if selectedFilter && selectedHashtag} · {/if}{#if selectedHashtag}#{selectedHashtag}{/if}
 					</span>
 				{/if}
+				<div class="vote-filter" role="group" aria-label="Filter by vote status">
+					<button class="vf-btn" class:active={voteFilter === 'all'} onclick={() => voteFilter = 'all'}>All</button>
+					<button class="vf-btn" class:active={voteFilter === 'not-voted'} onclick={() => voteFilter = 'not-voted'}>New</button>
+					<button class="vf-btn" class:active={voteFilter === 'voted'} onclick={() => voteFilter = 'voted'}>Voted</button>
+				</div>
 				<span class="section-meta">
 					{m.home_list_count({ visible: visibleTheses.length, total: filteredTotal })}
 				</span>
@@ -652,6 +674,36 @@
 		font-size: var(--text-xs);
 		color: var(--color-text-light);
 		font-family: var(--font-mono);
+	}
+
+	.vote-filter {
+		display: inline-flex;
+		gap: 1px;
+		background: var(--color-border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+	}
+
+	.vf-btn {
+		padding: 0.25rem 0.6rem;
+		font-size: var(--text-xs);
+		font-weight: 500;
+		font-family: inherit;
+		background: var(--color-surface);
+		color: var(--color-text-muted);
+		border: none;
+		cursor: pointer;
+		transition: background var(--transition-fast), color var(--transition-fast);
+	}
+
+	.vf-btn:hover {
+		color: var(--color-text);
+	}
+
+	.vf-btn.active {
+		background: var(--color-primary-bg);
+		color: var(--color-primary);
+		font-weight: 600;
 	}
 
 	.clear-filter {

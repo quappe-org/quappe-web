@@ -16,6 +16,7 @@
 	import Logo from '$lib/components/Logo.svelte';
 	import Wizard from '$lib/components/Wizard.svelte';
 	import { onboardingStore } from '$lib/stores/onboarding.svelte';
+	import { bannerStore } from '$lib/stores/banner.svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -129,6 +130,7 @@
 		invertStore.init();
 		a11yStore.init();
 		localeStore.refresh();
+		bannerStore.load();
 		bootstrapUserId().then(() => {
 			ensureBudgetLoaded();
 			updatesStore.refresh();
@@ -186,7 +188,7 @@
 
 <div class="app">
 	<!-- ROW 0: top navigation bar -->
-	<header class="topbar">
+	<header class="topbar" class:popover-active={menuOpen || budgetOpen || sliderOpen || themeOpen}>
 		<div class="topbar-inner">
 			<a href="/" class="brand" onclick={closeAllPopovers}>
 				<Logo size={26} />
@@ -344,6 +346,9 @@
 	{/if}
 
 	<!-- ROW 1+: main content, centred editorial column -->
+	{#if bannerStore.text}
+		<div class="site-banner">{bannerStore.text}</div>
+	{/if}
 	<main class="main">
 		{@render children()}
 	</main>
@@ -799,6 +804,19 @@
 		min-width: 0;
 	}
 
+	/* ---- Site banner (admin-configurable) ---- */
+	.site-banner {
+		width: 100%;
+		padding: 0.6rem 1.5rem;
+		background: var(--color-primary-bg);
+		border-bottom: 1px solid var(--color-primary);
+		color: var(--color-primary);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		text-align: center;
+		line-height: 1.4;
+	}
+
 	/* ---- Responsive ---- */
 	@media (max-width: 768px) {
 		.topbar-inner {
@@ -818,6 +836,12 @@
 		.action-new-label { display: none; }
 		.action-new { width: 2.1rem; padding: 0; }
 		.main { padding: 1.5rem 1rem 3rem; }
+		/* Kill backdrop-filter when a popover is open so position:fixed
+		   escapes to viewport (backdrop-filter creates a containing block). */
+		.topbar.popover-active {
+			backdrop-filter: none;
+			-webkit-backdrop-filter: none;
+		}
 		.popover { position: fixed; top: auto; bottom: 0; left: 0; right: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; min-width: 0; max-height: 70dvh; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom, 0); }
 	}
 </style>

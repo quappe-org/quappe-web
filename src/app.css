@@ -203,7 +203,11 @@ html[data-invert='true'] iframe {
 }
 /* Dim the decorative heat / lifecycle side bands (visual noise, not content). */
 [data-calm='true'] .side-band {
-	opacity: 0.45;
+	display: none;
+}
+/* Compensate for removed bands — reduce left padding on thesis cards. */
+[data-calm='true'] .thesis-card {
+	padding-left: 1.5rem;
 }
 
 /* High contrast: strengthen text + borders for readability. */
