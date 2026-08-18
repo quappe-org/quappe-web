@@ -62,14 +62,10 @@
 	});
 
 	let visibleTheses = $derived.by(() => {
-		// Sort: unvoted theses first, then voted.
+		// Hide theses the user already voted on.
 		const userId = getUserId();
-		const sorted = [...filteredTheses].sort((a, b) => {
-			const aVoted = a.votes.some((v) => v.user_id === userId) ? 1 : 0;
-			const bVoted = b.votes.some((v) => v.user_id === userId) ? 1 : 0;
-			return aVoted - bVoted;
-		});
-		return sorted.slice(0, complexityStore.settings.max_theses);
+		const remaining = filteredTheses.filter((t) => !t.votes.some((v) => v.user_id === userId));
+		return remaining.slice(0, complexityStore.settings.max_theses);
 	});
 </script>
 

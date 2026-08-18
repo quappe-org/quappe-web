@@ -55,7 +55,6 @@
 		}
 	});
 
-	let hasVoted = $derived(serverVote !== null || hasVotedLocally);
 	let translated = $state<{ title: string; description: string } | null>(null);
 	let translating = $state(false);
 	let displayLocale = $state<string | null>(null);
@@ -157,7 +156,6 @@
 	<a
 		href="/thesis/{thesis.id}"
 		class="card thesis-card heat-{heat} lifecycle-band-{thesis.lifecycle?.state ?? 'seedling'}"
-		class:voted={hasVoted}
 	>
 	<span
 		class="side-band heat-band"
@@ -313,15 +311,6 @@
 	.thesis-card:hover {
 		box-shadow: var(--shadow-md);
 		transform: translateY(-1px);
-	}
-
-	/* Subtle dimming for theses the user already voted on — they recede. */
-	.thesis-card.voted {
-		opacity: 0.7;
-	}
-
-	.thesis-card.voted:hover {
-		opacity: 1;
 	}
 
 	.thesis-card:hover .thesis-title {

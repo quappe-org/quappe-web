@@ -129,20 +129,18 @@
 		let filtered = allTheses;
 		if (selectedFilter) filtered = filtered.filter((t) => t.categories.includes(selectedFilter!));
 		if (selectedHashtag) filtered = filtered.filter((t) => (t.hashtags ?? []).includes(selectedHashtag!));
-		// Sort: unvoted theses first, then voted — natural progressive disclosure.
+		// Hide theses the user already voted on — focus on what's still open.
 		const userId = getUserId();
-		const sorted = [...filtered].sort((a, b) => {
-			const aVoted = a.votes.some((v) => v.user_id === userId) ? 1 : 0;
-			const bVoted = b.votes.some((v) => v.user_id === userId) ? 1 : 0;
-			return aVoted - bVoted;
-		});
-		return sorted.slice(0, complexityStore.settings.max_theses);
+		filtered = filtered.filter((t) => !t.votes.some((v) => v.user_id === userId));
+		return filtered.slice(0, complexityStore.settings.max_theses);
 	});
 
 	let filteredTotal = $derived.by(() => {
 		let filtered = allTheses;
 		if (selectedFilter) filtered = filtered.filter((t) => t.categories.includes(selectedFilter!));
 		if (selectedHashtag) filtered = filtered.filter((t) => (t.hashtags ?? []).includes(selectedHashtag!));
+		const userId = getUserId();
+		filtered = filtered.filter((t) => !t.votes.some((v) => v.user_id === userId));
 		return filtered.length;
 	});
 
