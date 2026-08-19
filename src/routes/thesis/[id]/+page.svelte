@@ -196,22 +196,73 @@
 	}
 
 	onMount(() => {
-		const id = setInterval(pollVotes, 15_000);
+		loadOpinionGraph();
+		const id = setInterval(() => { pollVotes(); loadOpinionGraph(); }, 15_000);
 		return () => clearInterval(id);
 	});
 
 	// All argument groups, sorted by approval (frozen order), capped for display.
 	let topGroups = $derived.by(() =>
-		[...argGroups].sort(byFrozen).slice(0, complexityStore.settings.max_arguments)
+		[...visibleArgGroups].sort(byFrozen).slice(0, complexityStore.settings.max_arguments)
 	);
 
 	// Groups below the display cap — shown under "more arguments".
 	let poolGroups = $derived.by(() => {
 		const topIds = new Set<string>(topGroups.map((g) => g.root.id));
-		return argGroups.filter((g) => !topIds.has(g.root.id)).sort(byFrozen);
+		return visibleArgGroups.filter((g) => !topIds.has(g.root.id)).sort(byFrozen);
 	});
 
 	let totalArguments = $derived(argGroups.length);
+
+	// --- Opinion view filter ---
+	// Show all arguments, or only those approved primarily by thesis-supporters
+	// / thesis-rejecters. The distribution comes from the opinion-graph endpoint:
+	// per argument, how its approvers split by their own thesis vote.
+	type OpinionView = 'all' | 'supporters' | 'rejecters';
+	let opinionView = $state<OpinionView>('all');
+
+	interface ArgApproval {
+		argument_id: string;
+		by_thesis_support: number;
+		by_thesis_reject: number;
+		by_thesis_neutral: number;
+		by_thesis_none: number;
+		total_approvers: number;
+	}
+	let approvals = $state<Map<string, ArgApproval>>(new Map());
+
+	async function loadOpinionGraph() {
+		if (typeof window === 'undefined' || !thesis) return;
+		try {
+			const res = await fetch(`/api/theses/${thesis.id}/opinion-graph`);
+			if (!res.ok) return;
+			const data = (await res.json()) as { arguments: ArgApproval[] };
+			const m = new Map<string, ArgApproval>();
+			for (const a of data.arguments) m.set(a.argument_id, a);
+			approvals = m;
+		} catch {
+			// silent — view filter just falls back to 'all'
+		}
+	}
+
+	// Does any argument in a group appeal to the selected camp? An argument
+	// "belongs" to supporters/rejecters if that camp makes up the plurality of
+	// its approvers. This is emergent, not declared.
+	function groupMatchesView(g: ArgGroup): boolean {
+		if (opinionView === 'all') return true;
+		for (const a of g.all) {
+			const ap = approvals.get(a.id);
+			if (!ap || ap.total_approvers === 0) continue;
+			if (opinionView === 'supporters' && ap.by_thesis_support >= ap.by_thesis_reject && ap.by_thesis_support > 0) return true;
+			if (opinionView === 'rejecters' && ap.by_thesis_reject >= ap.by_thesis_support && ap.by_thesis_reject > 0) return true;
+		}
+		return false;
+	}
+
+	let visibleArgGroups = $derived.by(() => {
+		if (opinionView === 'all') return argGroups;
+		return argGroups.filter(groupMatchesView);
+	});
 
 	// --- Thesis voting ---
 	let voting = $state(false);
@@ -667,13 +718,18 @@
 			<div class="arguments-col">
 				<div class="col-header">
 					<h2 class="col-title">
-						{m.argcol_supporting()}
+						{m.argcol_arguments()}
 						<span class="col-count">({totalArguments})</span>
 					</h2>
 					<button
 						class="btn btn-sm add-arg-btn"
 						onclick={() => openNewArg()}
 					>{m.argcol_add_arg()}</button>
+				</div>
+				<div class="opinion-view" role="group" aria-label={m.opinion_view_label()}>
+					<button class="ov-btn" class:active={opinionView === 'all'} onclick={() => opinionView = 'all'}>{m.opinion_view_all()}</button>
+					<button class="ov-btn" class:active={opinionView === 'supporters'} onclick={() => opinionView = 'supporters'}>{m.opinion_view_supporters()}</button>
+					<button class="ov-btn" class:active={opinionView === 'rejecters'} onclick={() => opinionView = 'rejecters'}>{m.opinion_view_rejecters()}</button>
 				</div>
 				<div class="arguments-list">
 					{#each topGroups as g, idx (g.root.id)}
@@ -1152,6 +1208,37 @@
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		padding-bottom: 0.375rem;
+	}
+
+	.opinion-view {
+		display: inline-flex;
+		gap: 1px;
+		background: var(--color-border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		margin-bottom: 0.75rem;
+	}
+
+	.ov-btn {
+		padding: 0.3rem 0.7rem;
+		font-size: var(--text-xs);
+		font-weight: 500;
+		font-family: inherit;
+		background: var(--color-surface);
+		color: var(--color-text-muted);
+		border: none;
+		cursor: pointer;
+		transition: background var(--transition-fast), color var(--transition-fast);
+	}
+
+	.ov-btn:hover {
+		color: var(--color-text);
+	}
+
+	.ov-btn.active {
+		background: var(--color-primary-bg);
+		color: var(--color-primary);
+		font-weight: 600;
 	}
 
 	.col-title {

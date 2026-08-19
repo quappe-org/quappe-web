@@ -300,6 +300,7 @@
 			compact
 			simple={simpleMode}
 			hideNeutral
+			agreeMode
 			oncast={castVote}
 		/>
 		<div class="argument-actions">

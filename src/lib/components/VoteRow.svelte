@@ -13,6 +13,7 @@
 		showButtons?: boolean;
 		simple?: boolean; // reduced UI: support/reject only, no neutral, no weight
 		hideNeutral?: boolean; // hide neutral button/count (arguments don't support neutral votes)
+		agreeMode?: boolean; // label buttons Agree/Disagree instead of Support/Reject (arguments)
 		oncast?: (type: VoteType, weight: number) => void;
 	}
 
@@ -25,6 +26,7 @@
 		showButtons = true,
 		simple = false,
 		hideNeutral = false,
+		agreeMode = false,
 		oncast
 	}: Props = $props();
 
@@ -66,10 +68,10 @@
 			data-weight={currentVote === 'support' ? currentWeight : 0}
 			onclick={(e) => handle('support', e)}
 			disabled={voting}
-			title={m.vote_support_hint()}
+			title={agreeMode ? m.vote_agree_hint() : m.vote_support_hint()}
 		>
 			<span class="glyph">+</span>
-			{#if !compact}<span class="vb-label">{m.vote_support()}</span>{/if}
+			{#if !compact}<span class="vb-label">{agreeMode ? m.vote_agree() : m.vote_support()}</span>{/if}
 			{#if !simple && currentVote === 'support' && currentWeight > 1}
 				<span class="weight-badge">×{currentWeight}</span>
 			{/if}
@@ -80,10 +82,10 @@
 			data-weight={currentVote === 'reject' ? currentWeight : 0}
 			onclick={(e) => handle('reject', e)}
 			disabled={voting}
-			title={m.vote_reject_hint()}
+			title={agreeMode ? m.vote_disagree_hint() : m.vote_reject_hint()}
 		>
 			<span class="glyph">−</span>
-			{#if !compact}<span class="vb-label">{m.vote_reject()}</span>{/if}
+			{#if !compact}<span class="vb-label">{agreeMode ? m.vote_disagree() : m.vote_reject()}</span>{/if}
 			{#if !simple && currentVote === 'reject' && currentWeight > 1}
 				<span class="weight-badge">×{currentWeight}</span>
 			{/if}
