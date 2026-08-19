@@ -25,19 +25,60 @@
 		activityStore.set([], '');
 	});
 
-	// Frozen set of theses the user had ALREADY voted on at load time. We hide
-	// only these, so voting on a thesis in this session does NOT make it vanish
-	// mid-interaction (the list stays stable). Recomputed on navigation/reload.
+	// Frozen set of theses the user had ALREADY voted on at page load. We hide
+	// only these; anything voted DURING the session stays put. The set is only
+	// refreshed on an explicit "load more" (refreshFeed), never live — so the
+	// list never rearranges under the user's hands.
 	let alreadyVoted = $state<Set<string>>(new Set());
+	let snapshotTaken = false;
 	$effect(() => {
-		data.theses; // re-snapshot when the loaded data set changes
-		if (typeof window === 'undefined') return;
+		if (typeof window === 'undefined' || snapshotTaken) return;
+		if (allTheses.length === 0) return;
+		snapshotTaken = true;
 		const userId = getUserId();
 		const set = new Set<string>();
 		for (const t of allTheses) {
 			if (t.votes.some((v) => v.user_id === userId)) set.add(t.id);
 		}
 		alreadyVoted = set;
+	});
+
+	// Re-snapshot: fold theses voted this session into the hidden set and pull
+	// fresh data. Called from the "load more / refresh" affordance.
+	let refreshing = $state(false);
+	async function refreshFeed() {
+		if (refreshing) return;
+		refreshing = true;
+		try {
+			const userId = getUserId();
+			// Fold everything currently voted into the hidden set.
+			const next = new Set(alreadyVoted);
+			for (const t of allTheses) {
+				if (t.votes.some((v) => v.user_id === userId)) next.add(t.id);
+			}
+			// Pull fresh theses from the server (same query the loader uses).
+			const res = await fetch('/api/theses?trending=true&limit=200');
+			if (res.ok) {
+				const fresh = (await res.json()) as Thesis[];
+				if (Array.isArray(fresh)) allTheses = fresh;
+			}
+			alreadyVoted = next;
+			if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+		} finally {
+			refreshing = false;
+		}
+	}
+
+	// Count of theses voted THIS session that are still shown (candidates to
+	// clear on the next refresh) — powers the "load more" hint.
+	let sessionVotedCount = $derived.by(() => {
+		if (typeof window === 'undefined') return 0;
+		const userId = getUserId();
+		let n = 0;
+		for (const t of visibleTheses) {
+			if (t.votes.some((v) => v.user_id === userId)) n++;
+		}
+		return n;
 	});
 
 	// Listen for external "new thesis" intent (from sidebar button)
@@ -587,13 +628,27 @@
 			</div>
 
 			{#if visibleTheses.length === 0}
-				<p class="empty-state">
-					{#if selectedFilter || selectedHashtag}
-						{m.home_list_empty_filtered({ category: selectedFilter ?? `#${selectedHashtag}` })}
-					{:else}
-						{m.home_list_empty()}
+				<div class="feed-refresh">
+					<p class="empty-state">
+						{#if selectedFilter || selectedHashtag}
+							{m.home_list_empty_filtered({ category: selectedFilter ?? `#${selectedHashtag}` })}
+						{:else}
+							{m.home_all_voted()}
+						{/if}
+					</p>
+					{#if !selectedFilter && !selectedHashtag}
+						<button class="btn btn-primary" onclick={refreshFeed} disabled={refreshing}>
+							{refreshing ? m.home_refresh_loading() : m.home_refresh_more()}
+						</button>
 					{/if}
-				</p>
+				</div>
+			{:else if sessionVotedCount > 0}
+				<div class="feed-refresh">
+					<p class="feed-refresh-hint">{m.home_refresh_hint({ count: sessionVotedCount })}</p>
+					<button class="btn btn-sm" onclick={refreshFeed} disabled={refreshing}>
+						{refreshing ? m.home_refresh_loading() : m.home_refresh_more()}
+					</button>
+				</div>
 			{/if}
 
 			{#if filteredTotal > visibleTheses.length}
@@ -969,6 +1024,21 @@
 		color: var(--color-text-muted);
 		padding: 2rem 1rem;
 		font-size: var(--text-base);
+	}
+
+	.feed-refresh {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 1.5rem 1rem;
+		text-align: center;
+	}
+
+	.feed-refresh-hint {
+		margin: 0;
+		font-size: var(--text-sm);
+		color: var(--color-text-muted);
 	}
 
 	.limit-note {
