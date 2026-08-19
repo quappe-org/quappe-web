@@ -25,6 +25,21 @@
 		activityStore.set([], '');
 	});
 
+	// Frozen set of theses the user had ALREADY voted on at load time. We hide
+	// only these, so voting on a thesis in this session does NOT make it vanish
+	// mid-interaction (the list stays stable). Recomputed on navigation/reload.
+	let alreadyVoted = $state<Set<string>>(new Set());
+	$effect(() => {
+		data.theses; // re-snapshot when the loaded data set changes
+		if (typeof window === 'undefined') return;
+		const userId = getUserId();
+		const set = new Set<string>();
+		for (const t of allTheses) {
+			if (t.votes.some((v) => v.user_id === userId)) set.add(t.id);
+		}
+		alreadyVoted = set;
+	});
+
 	// Listen for external "new thesis" intent (from sidebar button)
 	let _lastSeenIntent = $state(0);
 	$effect(() => {
@@ -129,9 +144,9 @@
 		let filtered = allTheses;
 		if (selectedFilter) filtered = filtered.filter((t) => t.categories.includes(selectedFilter!));
 		if (selectedHashtag) filtered = filtered.filter((t) => (t.hashtags ?? []).includes(selectedHashtag!));
-		// Hide theses the user already voted on — focus on what's still open.
-		const userId = getUserId();
-		filtered = filtered.filter((t) => !t.votes.some((v) => v.user_id === userId));
+		// Hide only theses the user had ALREADY voted on at load — voting now
+		// keeps the thesis visible until the next reload (no mid-click vanish).
+		filtered = filtered.filter((t) => !alreadyVoted.has(t.id));
 		return filtered.slice(0, complexityStore.settings.max_theses);
 	});
 
@@ -139,8 +154,7 @@
 		let filtered = allTheses;
 		if (selectedFilter) filtered = filtered.filter((t) => t.categories.includes(selectedFilter!));
 		if (selectedHashtag) filtered = filtered.filter((t) => (t.hashtags ?? []).includes(selectedHashtag!));
-		const userId = getUserId();
-		filtered = filtered.filter((t) => !t.votes.some((v) => v.user_id === userId));
+		filtered = filtered.filter((t) => !alreadyVoted.has(t.id));
 		return filtered.length;
 	});
 

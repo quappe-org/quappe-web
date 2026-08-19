@@ -3,7 +3,6 @@
 	import { complexityStore } from '$lib/stores/complexity.svelte';
 	import { categoriesStore } from '$lib/stores/categories.svelte';
 	import { activityStore } from '$lib/stores/activity.svelte';
-	import { getUserId } from '$lib/stores/user';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
 	import { m } from '$lib/paraglide/messages';
 
@@ -62,10 +61,8 @@
 	});
 
 	let visibleTheses = $derived.by(() => {
-		// Hide theses the user already voted on.
-		const userId = getUserId();
-		const remaining = filteredTheses.filter((t) => !t.votes.some((v) => v.user_id === userId));
-		return remaining.slice(0, complexityStore.settings.max_theses);
+		// Top is a ranking — show everything, including theses the user voted on.
+		return filteredTheses.slice(0, complexityStore.settings.max_theses);
 	});
 </script>
 
