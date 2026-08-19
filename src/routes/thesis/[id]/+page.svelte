@@ -1212,16 +1212,17 @@
 
 	.opinion-view {
 		display: inline-flex;
-		gap: 1px;
+		gap: 2px;
 		background: var(--color-border);
-		border-radius: var(--radius-sm);
+		border-radius: var(--radius-md);
 		overflow: hidden;
-		margin-bottom: 0.75rem;
+		margin-bottom: 1rem;
+		flex-wrap: wrap;
 	}
 
 	.ov-btn {
-		padding: 0.3rem 0.7rem;
-		font-size: var(--text-xs);
+		padding: 0.55rem 1.1rem;
+		font-size: var(--text-sm);
 		font-weight: 500;
 		font-family: inherit;
 		background: var(--color-surface);
