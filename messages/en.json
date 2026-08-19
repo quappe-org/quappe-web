@@ -138,6 +138,7 @@
 	"variant_sort_latest": "Latest",
 	"variant_leading": "leading",
 	"variant_more": "+{count} more",
+	"variant_show_less": "Show fewer",
 	"related_title": "Related theses",
 	"related_mode_semantic": "semantic",
 	"related_mode_thematic": "thematic",

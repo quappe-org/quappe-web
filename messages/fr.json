@@ -138,6 +138,7 @@
 	"variant_sort_latest": "Récentes",
 	"variant_leading": "en tête",
 	"variant_more": "+{count} de plus",
+	"variant_show_less": "Afficher moins",
 	"related_title": "Thèses liées",
 	"related_mode_semantic": "sémantique",
 	"related_mode_thematic": "thématique",

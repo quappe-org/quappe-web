@@ -60,6 +60,7 @@
 	// Expand / collapse + sort mode
 	let expanded = $state(false);
 	let sortMode = $state<'top' | 'latest'>('top');
+	let showAllVariants = $state(false); // reveal variants beyond the cap
 
 	let sortedFamily = $derived.by<Argument[]>(() => {
 		const arr = [...family];
@@ -73,7 +74,7 @@
 
 	let maxVariants = $derived(complexityStore.settings.max_arguments);
 	let simpleMode = $derived(registerForComplexity(complexityStore.settings.max_arguments) === 'simple');
-	let visibleVariants = $derived(sortedFamily.slice(0, maxVariants));
+	let visibleVariants = $derived(showAllVariants ? sortedFamily : sortedFamily.slice(0, maxVariants));
 	let hiddenCount = $derived(Math.max(0, sortedFamily.length - visibleVariants.length));
 
 	// Vote summary for the ACTIVE variant.
@@ -237,7 +238,13 @@
 				{/each}
 			</ul>
 			{#if hiddenCount > 0}
-				<p class="variant-more">{m.variant_more({ count: hiddenCount })}</p>
+				<button type="button" class="variant-more" onclick={() => showAllVariants = true}>
+					{m.variant_more({ count: hiddenCount })}
+				</button>
+			{:else if showAllVariants && sortedFamily.length > maxVariants}
+				<button type="button" class="variant-more" onclick={() => showAllVariants = false}>
+					{m.variant_show_less()}
+				</button>
 			{/if}
 		</div>
 	{/if}
@@ -492,11 +499,23 @@
 	}
 
 	.variant-more {
+		display: block;
+		width: 100%;
 		margin: 0;
+		padding: 0.35rem;
 		font-size: var(--text-xs);
-		color: var(--color-text-light);
-		font-style: italic;
+		font-family: inherit;
+		color: var(--color-primary);
+		background: none;
+		border: none;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
 		text-align: center;
+		transition: background var(--transition-fast);
+	}
+
+	.variant-more:hover {
+		background: var(--color-primary-bg);
 	}
 
 	.argument-content {
