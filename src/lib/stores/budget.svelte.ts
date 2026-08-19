@@ -4,21 +4,18 @@
 //
 // Model (Fibonacci-flavoured), reset at local midnight:
 //   - theses:        8/day
-//   - support args:  8/day
-//   - reject args:   8/day
+//   - arguments:     8/day
 //   - weight points: 21/day  (base weight-1 votes are FREE; only extra weight costs)
 
 const THESIS_LIMIT = 8;
-const SUPPORT_ARG_LIMIT = 8;
-const REJECT_ARG_LIMIT = 8;
+const ARG_LIMIT = 8;
 const WEIGHT_LIMIT = 21;
 const STORAGE_KEY = 'quappe_budget';
 
 interface BudgetState {
 	weight_remaining: number;
 	theses_remaining: number;
-	support_args_remaining: number;
-	reject_args_remaining: number;
+	arguments_remaining: number;
 	lastReset: string; // ISO date (YYYY-MM-DD)
 }
 
@@ -30,8 +27,7 @@ function emptyState(): BudgetState {
 	return {
 		weight_remaining: WEIGHT_LIMIT,
 		theses_remaining: THESIS_LIMIT,
-		support_args_remaining: SUPPORT_ARG_LIMIT,
-		reject_args_remaining: REJECT_ARG_LIMIT,
+		arguments_remaining: ARG_LIMIT,
 		lastReset: getToday()
 	};
 }
@@ -46,8 +42,7 @@ function loadBudget(): BudgetState {
 		return {
 			weight_remaining: clamp(p.weight_remaining, WEIGHT_LIMIT),
 			theses_remaining: clamp(p.theses_remaining, THESIS_LIMIT),
-			support_args_remaining: clamp(p.support_args_remaining, SUPPORT_ARG_LIMIT),
-			reject_args_remaining: clamp(p.reject_args_remaining, REJECT_ARG_LIMIT),
+			arguments_remaining: clamp(p.arguments_remaining, ARG_LIMIT),
 			lastReset: p.lastReset
 		};
 	} catch {
@@ -137,49 +132,31 @@ export const budgetStore = {
 		saveBudget(_budget);
 	},
 
-	// ---- Arguments (per stance) ----
-	get supportArgsRemaining() {
+	// ---- Arguments ----
+	get argumentsRemaining() {
 		ensureToday();
-		return _budget.support_args_remaining;
-	},
-	get rejectArgsRemaining() {
-		ensureToday();
-		return _budget.reject_args_remaining;
+		return _budget.arguments_remaining;
 	},
 	get argsLimit() {
-		return SUPPORT_ARG_LIMIT;
+		return ARG_LIMIT;
 	},
-	canCreateArgument(stance: 'support' | 'reject'): boolean {
+	canCreateArgument(): boolean {
 		ensureToday();
-		return stance === 'support'
-			? _budget.support_args_remaining > 0
-			: _budget.reject_args_remaining > 0;
+		return _budget.arguments_remaining > 0;
 	},
-	spendArgument(stance: 'support' | 'reject'): boolean {
+	spendArgument(): boolean {
 		ensureToday();
-		if (stance === 'support') {
-			if (_budget.support_args_remaining <= 0) return false;
-			_budget = { ..._budget, support_args_remaining: _budget.support_args_remaining - 1 };
-		} else {
-			if (_budget.reject_args_remaining <= 0) return false;
-			_budget = { ..._budget, reject_args_remaining: _budget.reject_args_remaining - 1 };
-		}
+		if (_budget.arguments_remaining <= 0) return false;
+		_budget = { ..._budget, arguments_remaining: _budget.arguments_remaining - 1 };
 		saveBudget(_budget);
 		return true;
 	},
-	refundArgument(stance: 'support' | 'reject'): void {
+	refundArgument(): void {
 		ensureToday();
-		if (stance === 'support') {
-			_budget = {
-				..._budget,
-				support_args_remaining: Math.min(SUPPORT_ARG_LIMIT, _budget.support_args_remaining + 1)
-			};
-		} else {
-			_budget = {
-				..._budget,
-				reject_args_remaining: Math.min(REJECT_ARG_LIMIT, _budget.reject_args_remaining + 1)
-			};
-		}
+		_budget = {
+			..._budget,
+			arguments_remaining: Math.min(ARG_LIMIT, _budget.arguments_remaining + 1)
+		};
 		saveBudget(_budget);
 	},
 
@@ -189,14 +166,12 @@ export const budgetStore = {
 	syncFromServer(status: {
 		weight_points?: { spent: number };
 		theses?: { spent: number };
-		support_args?: { spent: number };
-		reject_args?: { spent: number };
+		arguments?: { spent: number };
 	}): void {
 		_budget = {
 			weight_remaining: Math.max(0, WEIGHT_LIMIT - (status.weight_points?.spent ?? 0)),
 			theses_remaining: Math.max(0, THESIS_LIMIT - (status.theses?.spent ?? 0)),
-			support_args_remaining: Math.max(0, SUPPORT_ARG_LIMIT - (status.support_args?.spent ?? 0)),
-			reject_args_remaining: Math.max(0, REJECT_ARG_LIMIT - (status.reject_args?.spent ?? 0)),
+			arguments_remaining: Math.max(0, ARG_LIMIT - (status.arguments?.spent ?? 0)),
 			lastReset: getToday()
 		};
 		saveBudget(_budget);

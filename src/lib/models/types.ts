@@ -51,10 +51,7 @@ export interface ArgumentAttribute {
 	source_comment?: string; // description of the source
 }
 
-export type ArgumentStance = 'support' | 'reject';
-
 // ---- Lifecycle model (thesis-level) ----
-// Arguments inherit their thesis's state implicitly for now.
 
 export type LifecycleState =
 	| 'seedling' // newly created, gathering initial reactions
@@ -73,15 +70,12 @@ export interface LifecycleInfo {
 export interface Argument {
 	id: string;
 	thesis_id: string;
-	stance: ArgumentStance; // does this argument support or reject the thesis?
 	content: string;
 	attributes: ArgumentAttribute[];
 	votes: Vote[];
 	forked_from_id?: string; // argument this was forked from (parallel evolution)
 	// Optional — user-authored arguments start with `undefined`. A nightly
-	// backend LLM batch job assigns categories asynchronously. Never inherited
-	// from the parent thesis, so support/reject arguments can carry different
-	// topical labels than the thesis they attach to.
+	// backend LLM batch job assigns categories asynchronously.
 	categories?: Category[];
 	hashtags?: Hashtag[]; // user-typed #tags extracted from content
 	meta: Meta;
@@ -120,7 +114,6 @@ export interface CreateArgumentRequest {
 	thesis_id: string;
 	content: string;
 	attributes: ArgumentAttribute[];
-	stance: ArgumentStance;
 	forked_from_id?: string;
 }
 

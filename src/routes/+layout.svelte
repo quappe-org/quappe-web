@@ -90,7 +90,6 @@
 		thesis_title: string;
 		vote_type?: string;
 		weight?: number;
-		stance?: 'support' | 'reject';
 	}
 	interface BudgetBucketLite {
 		spent: number;
@@ -100,8 +99,7 @@
 	interface BudgetLite {
 		date: string;
 		theses: BudgetBucketLite;
-		support_args: BudgetBucketLite;
-		reject_args: BudgetBucketLite;
+		arguments: BudgetBucketLite;
 		weight_points: BudgetBucketLite;
 		events: BudgetEventLite[];
 	}
@@ -166,7 +164,7 @@
 
 	// Lowest remaining creation bucket → the number shown on the budget pill.
 	let budgetPillValue = $derived(
-		Math.min(budgetStore.thesesRemaining, budgetStore.supportArgsRemaining, budgetStore.rejectArgsRemaining)
+		Math.min(budgetStore.thesesRemaining, budgetStore.argumentsRemaining)
 	);
 
 	function fmtTime(iso: string): string {
@@ -179,7 +177,7 @@
 
 	function eventLabel(e: BudgetEventLite): string {
 		if (e.kind === 'thesis') return `+ ${e.thesis_title}`;
-		if (e.kind === 'argument') return `${e.stance === 'support' ? '+' : '−'} arg`;
+		if (e.kind === 'argument') return `+ arg`;
 		return `×${e.weight ?? 1} ${e.vote_type} · ${e.thesis_title}`;
 	}
 </script>
@@ -248,14 +246,9 @@
 									<span class="budget-count" class:low={budgetStore.thesesRemaining === 0}>{budgetStore.thesesRemaining}/{budgetStore.thesesLimit}</span>
 								</div>
 								<div class="budget-row">
-									<span class="budget-label">{m.panel_budget_support_args()}</span>
-									<span class="budget-bar"><span class="budget-bar-fill" style="width: {(budgetStore.supportArgsRemaining / budgetStore.argsLimit) * 100}%"></span></span>
-									<span class="budget-count" class:low={budgetStore.supportArgsRemaining === 0}>{budgetStore.supportArgsRemaining}/{budgetStore.argsLimit}</span>
-								</div>
-								<div class="budget-row">
-									<span class="budget-label">{m.panel_budget_reject_args()}</span>
-									<span class="budget-bar"><span class="budget-bar-fill" style="width: {(budgetStore.rejectArgsRemaining / budgetStore.argsLimit) * 100}%"></span></span>
-									<span class="budget-count" class:low={budgetStore.rejectArgsRemaining === 0}>{budgetStore.rejectArgsRemaining}/{budgetStore.argsLimit}</span>
+									<span class="budget-label">{m.panel_budget_arguments()}</span>
+									<span class="budget-bar"><span class="budget-bar-fill" style="width: {(budgetStore.argumentsRemaining / budgetStore.argsLimit) * 100}%"></span></span>
+									<span class="budget-count" class:low={budgetStore.argumentsRemaining === 0}>{budgetStore.argumentsRemaining}/{budgetStore.argsLimit}</span>
 								</div>
 								<div class="budget-row">
 									<span class="budget-label">{m.panel_budget_weight()}</span>

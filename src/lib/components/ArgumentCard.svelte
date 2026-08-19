@@ -9,12 +9,13 @@
 	import { budgetStore } from '$lib/stores/budget.svelte';
 	import { m } from '$lib/paraglide/messages';
 
-	let { argument, leading = false, variants = [], onFork, onEdit }: {
+	let { argument, leading = false, variants = [], onFork, onEdit, onNeedThesisVote }: {
 		argument: Argument;          // group root
 		leading?: boolean;
 		variants?: Argument[];       // forks (descendants) of the root
 		onFork?: (arg: Argument) => void;
 		onEdit?: (arg: Argument) => void;
+		onNeedThesisVote?: () => void; // fired when server gates on a missing thesis vote
 	} = $props();
 
 	function supportVotes(a: Argument): number {
@@ -160,6 +161,11 @@
 			});
 			if (!res.ok) {
 				if (chargeable) budgetStore.refundWeight(weight);
+				// Gate: server requires a thesis vote first. Nudge the user there.
+				if (res.status === 403) {
+					const err = await res.json().catch(() => null);
+					if (err?.code === 'thesis_vote_required') onNeedThesisVote?.();
+				}
 				return;
 			}
 			const data = await res.json();

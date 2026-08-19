@@ -269,11 +269,6 @@
 						<div class="updates-item-row">
 							<span class="updates-type updates-type-{e.kind}">{typeLabel(e.kind)}</span>
 							<time class="updates-time">{fmtTime(e.at)}</time>
-							{#if e.kind === 'new_argument' && e.argument_stance}
-								<span class="updates-stance updates-stance-{e.argument_stance}">
-									{e.argument_stance === 'support' ? m.updates_stance_pro() : m.updates_stance_con()}
-								</span>
-							{/if}
 							{#if e.kind === 'lifecycle' && e.lifecycle_state}
 								<span class="updates-lifecycle-state">{e.lifecycle_state}</span>
 							{/if}
@@ -648,26 +643,6 @@
 
 	.updates-thesis:hover {
 		color: var(--color-primary);
-	}
-
-	.updates-stance {
-		display: inline-block;
-		padding: 0.05rem 0.35rem;
-		font-size: 0.65rem;
-		font-weight: 600;
-		border-radius: var(--radius-sm);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.updates-stance-support {
-		background: var(--color-support-bg);
-		color: var(--color-support);
-	}
-
-	.updates-stance-reject {
-		background: var(--color-reject-bg);
-		color: var(--color-reject);
 	}
 
 	.updates-lifecycle-state {

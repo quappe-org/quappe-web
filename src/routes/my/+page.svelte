@@ -45,7 +45,6 @@
 		stats?: {
 			theses_authored: number;
 			arguments_authored: number;
-			stance_split: { support: number; reject: number };
 			votes_cast: { support: number; reject: number; neutral: number };
 			dominant_categories: { name: string; count: number }[];
 			engaged_theses: number;

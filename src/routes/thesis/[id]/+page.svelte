@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Argument, ArgumentStance, VoteType, VoteSummary, Category } from '$lib/models/types';
+	import type { Argument, VoteType, VoteSummary, Category } from '$lib/models/types';
 	import { complexityStore } from '$lib/stores/complexity.svelte';
 	import { categoriesStore } from '$lib/stores/categories.svelte';
 	import { activityStore } from '$lib/stores/activity.svelte';
@@ -72,7 +72,6 @@
 		root: Argument;
 		variants: Argument[]; // forks (descendants), excluding the root
 		all: Argument[]; // root + variants
-		stance: ArgumentStance;
 		groupScore: number; // combined weighted support-reject across all variants
 	}
 
@@ -110,7 +109,7 @@
 			const root = rootOf(a);
 			let g = groups.get(root.id);
 			if (!g) {
-				g = { root, variants: [], all: [], stance: root.stance, groupScore: 0 };
+				g = { root, variants: [], all: [], groupScore: 0 };
 				groups.set(root.id, g);
 			}
 		}
@@ -201,31 +200,18 @@
 		return () => clearInterval(id);
 	});
 
-	let supportGroups = $derived.by(() =>
-		argGroups
-			.filter((g) => g.stance === 'support')
-			.sort(byFrozen)
-			.slice(0, complexityStore.settings.max_arguments)
+	// All argument groups, sorted by approval (frozen order), capped for display.
+	let topGroups = $derived.by(() =>
+		[...argGroups].sort(byFrozen).slice(0, complexityStore.settings.max_arguments)
 	);
 
-	let rejectGroups = $derived.by(() =>
-		argGroups
-			.filter((g) => g.stance === 'reject')
-			.sort(byFrozen)
-			.slice(0, complexityStore.settings.max_arguments)
-	);
-
-	// "Weitere Argumente": groups below the top-column cap, in frozen order.
+	// Groups below the display cap — shown under "more arguments".
 	let poolGroups = $derived.by(() => {
-		const topIds = new Set<string>([
-			...supportGroups.map((g) => g.root.id),
-			...rejectGroups.map((g) => g.root.id)
-		]);
+		const topIds = new Set<string>(topGroups.map((g) => g.root.id));
 		return argGroups.filter((g) => !topIds.has(g.root.id)).sort(byFrozen);
 	});
 
-	let totalSupport = $derived(argGroups.filter((g) => g.stance === 'support').length);
-	let totalReject = $derived(argGroups.filter((g) => g.stance === 'reject').length);
+	let totalArguments = $derived(argGroups.length);
 
 	// --- Thesis voting ---
 	let voting = $state(false);
@@ -241,13 +227,23 @@
 		currentWeight = existing?.weight ?? 1;
 	});
 
+	// When the server gates an argument vote on a missing thesis vote, flash a
+	// hint on the thesis tile and scroll it into view so the user positions first.
+	let needThesisVoteHint = $state(false);
+	function nudgeThesisVote() {
+		needThesisVoteHint = true;
+		if (typeof document !== 'undefined') {
+			document.querySelector('.thesis-tile')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		}
+		setTimeout(() => { needThesisVoteHint = false; }, 5000);
+	}
+
 	async function castThesisVote(type: VoteType, weight: number) {
 		if (voting || !thesis) return;
 		// Base weight-1 votes are free; only extra weight draws from the pool.
 		const isRetract = currentVote === type && currentWeight === weight;
 		const chargeable = !isRetract && (type === 'support' || type === 'reject') && weight > 1;
-		if (chargeable) {
-			if (!budgetStore.canAffordWeight(weight)) return;
+		if (chargeable) {			if (!budgetStore.canAffordWeight(weight)) return;
 			budgetStore.spendWeight(weight);
 		}
 		voting = true;
@@ -278,15 +274,13 @@
 	let showArgForm = $state(false);
 	let argFormMode = $state<ArgFormMode>('new');
 	let argContent = $state('');
-	let argStance = $state<ArgumentStance>('support');
 	let argForkedFromId = $state<string | undefined>(undefined);
 	let argEditingId = $state<string | undefined>(undefined);
 	let argSubmitting = $state(false);
 	let argError = $state<string | null>(null);
 
-	function openNewArg(stance: ArgumentStance) {
+	function openNewArg() {
 		argFormMode = 'new';
-		argStance = stance;
 		argContent = '';
 		argForkedFromId = undefined;
 		argEditingId = undefined;
@@ -296,7 +290,6 @@
 
 	function openFork(source: Argument) {
 		argFormMode = 'fork';
-		argStance = source.stance;
 		argContent = source.content;
 		argForkedFromId = source.id;
 		argEditingId = undefined;
@@ -305,7 +298,6 @@
 
 	function openEdit(target: Argument) {
 		argFormMode = 'edit';
-		argStance = target.stance;
 		argContent = target.content;
 		argForkedFromId = target.forked_from_id;
 		argEditingId = target.id;
@@ -362,15 +354,13 @@
 		}
 
 		argSubmitting = true;
-		// Creating (or forking) an argument spends the per-stance daily bucket.
-		if (!budgetStore.canCreateArgument(argStance)) {
-			argError = argStance === 'support'
-				? m.argcol_add_disabled_support()
-				: m.argcol_add_disabled_reject();
+		// Creating (or forking) an argument spends the daily budget.
+		if (!budgetStore.canCreateArgument()) {
+			argError = m.argcol_add_disabled_support();
 			argSubmitting = false;
 			return;
 		}
-		budgetStore.spendArgument(argStance);
+		budgetStore.spendArgument();
 		try {
 			const res = await fetch('/api/arguments', {
 				method: 'POST',
@@ -378,13 +368,12 @@
 				body: JSON.stringify({
 					thesis_id: thesis.id,
 					content: argContent.trim(),
-					stance: argStance,
 					forked_from_id: argForkedFromId,
 					author_id: getUserId()
 				})
 			});
 			if (!res.ok) {
-				budgetStore.refundArgument(argStance);
+				budgetStore.refundArgument();
 				argError = await extractError(res);
 				return;
 			}
@@ -617,6 +606,9 @@
 				{/if}
 
 				<div class="thesis-tile-footer">
+					{#if needThesisVoteHint}
+						<p class="thesis-vote-hint">{m.thesis_vote_first_hint()}</p>
+					{/if}
 					{#if voteSummary}
 						<VoteRow
 							summary={voteSummary}
@@ -654,25 +646,6 @@
 						<p class="form-hint">{m.argform_fork_hint()}</p>
 					{/if}
 
-					{#if argFormMode !== 'edit'}
-						<div class="stance-toggle">
-							<button
-								type="button"
-								class="btn btn-sm stance-btn"
-								class:stance-support={argStance === 'support'}
-								onclick={() => argFormMode !== 'fork' && (argStance = 'support')}
-								disabled={argFormMode === 'fork'}
-							>{m.argform_stance_support()}</button>
-							<button
-								type="button"
-								class="btn btn-sm stance-btn"
-								class:stance-reject={argStance === 'reject'}
-								onclick={() => argFormMode !== 'fork' && (argStance = 'reject')}
-								disabled={argFormMode === 'fork'}
-							>{m.argform_stance_reject()}</button>
-						</div>
-					{/if}
-
 					<div class="form-group">
 						<label for="arg-content">{m.argform_content_label()} <span class="hint-inline">{m.argform_content_hint()}</span></label>
 						<textarea id="arg-content" bind:value={argContent} placeholder={m.argform_content_placeholder()} maxlength="800" required></textarea>
@@ -691,61 +664,31 @@
 				</form>
 			{/if}
 
-			<div class="arguments-columns">
-				<div class="arguments-col col-support">
-					<div class="col-header">
-						<h2 class="col-title">
-							<span class="col-marker" aria-hidden="true"></span>
-							{m.argcol_supporting()}
-							<span class="col-count">({totalSupport})</span>
-						</h2>
-						<button
-							class="btn btn-sm add-arg-btn"
-							onclick={() => openNewArg('support')}
-						>{m.argcol_add_arg()}</button>
-					</div>
-				<div class="arguments-list">
-						{#each supportGroups as g, idx (g.root.id)}
-						<ArgumentCard
-							argument={g.root}
-							leading={idx === 0}
-							variants={g.variants}
-							onFork={openFork}
-							onEdit={openEdit}
-						/>
-					{/each}
-					{#if supportGroups.length === 0}
-							<p class="col-empty">{m.argcol_empty_support()}</p>
-						{/if}
-					</div>
+			<div class="arguments-col">
+				<div class="col-header">
+					<h2 class="col-title">
+						{m.argcol_supporting()}
+						<span class="col-count">({totalArguments})</span>
+					</h2>
+					<button
+						class="btn btn-sm add-arg-btn"
+						onclick={() => openNewArg()}
+					>{m.argcol_add_arg()}</button>
 				</div>
-
-				<div class="arguments-col col-reject">
-					<div class="col-header">
-						<h2 class="col-title">
-							<span class="col-marker" aria-hidden="true"></span>
-							{m.argcol_rejecting()}
-							<span class="col-count">({totalReject})</span>
-						</h2>
-						<button
-							class="btn btn-sm add-arg-btn"
-							onclick={() => openNewArg('reject')}
-						>{m.argcol_add_arg()}</button>
-					</div>
 				<div class="arguments-list">
-					{#each rejectGroups as g, idx (g.root.id)}
+					{#each topGroups as g, idx (g.root.id)}
 						<ArgumentCard
 							argument={g.root}
 							leading={idx === 0}
 							variants={g.variants}
 							onFork={openFork}
 							onEdit={openEdit}
+							onNeedThesisVote={nudgeThesisVote}
 						/>
 					{/each}
-					{#if rejectGroups.length === 0}
-							<p class="col-empty">{m.argcol_empty_reject()}</p>
-						{/if}
-					</div>
+					{#if topGroups.length === 0}
+						<p class="col-empty">{m.argcol_empty_support()}</p>
+					{/if}
 				</div>
 			</div>
 
@@ -759,21 +702,19 @@
 				{:else}
 					<ul class="argument-pool-list">
 						{#each poolGroups as g (g.root.id)}
-							<li class="argument-pool-item" class:is-support={g.stance === 'support'} class:is-reject={g.stance === 'reject'}>
-								<span class="argument-pool-stance argument-pool-stance-{g.stance}">
-									{g.stance === 'support' ? m.argpool_stance_support() : m.argpool_stance_reject()}
-								</span>
+							<li class="argument-pool-item">
 							<ArgumentCard
 								argument={g.root}
 								variants={g.variants}
 								onFork={openFork}
 								onEdit={openEdit}
+								onNeedThesisVote={nudgeThesisVote}
 							/>
 							</li>
 						{/each}
 					</ul>
 				{/if}
-				{#if argGroups.length > supportGroups.length + rejectGroups.length + poolGroups.length}
+				{#if argGroups.length > topGroups.length + poolGroups.length}
 					<p class="complexity-note">{m.complexity_slider_hint()}</p>
 				{/if}
 			</section>
@@ -1109,6 +1050,17 @@
 		flex-wrap: wrap;
 	}
 
+	.thesis-vote-hint {
+		flex-basis: 100%;
+		margin: 0 0 0.25rem;
+		padding: 0.5rem 0.75rem;
+		background: var(--color-primary-bg);
+		color: var(--color-primary);
+		border-radius: var(--radius-sm);
+		font-size: var(--text-sm);
+		font-weight: 500;
+	}
+
 	.thesis-admin-row {
 		display: flex;
 		gap: 0.5rem;
@@ -1166,31 +1118,6 @@
 		font-size: var(--text-sm);
 	}
 
-	.stance-toggle {
-		display: flex;
-		gap: 0.5rem;
-	}
-
-	.stance-btn {
-		flex: 1;
-		justify-content: center;
-		border: 2px solid var(--color-border);
-	}
-
-	.stance-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-	.stance-btn.stance-support {
-		border-color: var(--color-support);
-		background: var(--color-support-bg);
-		color: var(--color-support);
-		font-weight: 600;
-	}
-	.stance-btn.stance-reject {
-		border-color: var(--color-reject);
-		background: var(--color-reject-bg);
-		color: var(--color-reject);
-		font-weight: 600;
-	}
-
 	.category-grid {
 		display: flex;
 		flex-wrap: wrap;
@@ -1208,18 +1135,7 @@
 		border-color: var(--color-primary);
 	}
 
-	/* Two-column layout */
-	.arguments-columns {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 1.25rem;
-		align-items: start;
-	}
-
-	@media (max-width: 900px) {
-		.arguments-columns { grid-template-columns: 1fr; }
-	}
-
+	/* Single-column argument list */
 	.arguments-col {
 		display: flex;
 		flex-direction: column;
@@ -1227,16 +1143,6 @@
 		padding: 0.875rem;
 		border-radius: var(--radius-md);
 		border: 1px solid var(--color-border);
-	}
-
-	.col-support {
-		background: linear-gradient(180deg, rgba(134, 239, 172, 0.10) 0%, transparent 40%);
-		border-left: 3px solid var(--color-support);
-	}
-
-	.col-reject {
-		background: linear-gradient(180deg, rgba(252, 165, 165, 0.10) 0%, transparent 40%);
-		border-left: 3px solid var(--color-reject);
 	}
 
 	.col-header {
@@ -1257,25 +1163,12 @@
 		margin: 0;
 	}
 
-	.col-support .col-title { color: var(--color-support); }
-	.col-reject .col-title  { color: var(--color-reject); }
-
 	.col-count {
 		font-size: var(--text-sm);
 		font-weight: 500;
 		color: var(--color-text-muted);
 		font-family: var(--font-mono);
 	}
-
-	.col-marker {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		align-self: center;
-	}
-
-	.col-support .col-marker { background: var(--color-support); }
-	.col-reject  .col-marker { background: var(--color-reject); }
 
 	/* Small "add argument" button - deliberately not styled like a bold action.
 	   It's a helper, not the primary action of the column. */
@@ -1381,38 +1274,6 @@
 
 	.argument-pool-item {
 		position: relative;
-	}
-
-	.argument-pool-item.is-support :global(.argument-card) {
-		border-left: 3px solid var(--color-support);
-	}
-	.argument-pool-item.is-reject :global(.argument-card) {
-		border-left: 3px solid var(--color-reject);
-	}
-
-	.argument-pool-stance {
-		position: absolute;
-		top: 0.5rem;
-		right: 0.5rem;
-		z-index: 2;
-		font-size: 0.6rem;
-		font-family: var(--font-mono);
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		padding: 0.1rem 0.4rem;
-		border-radius: 9999px;
-		border: 1px solid transparent;
-	}
-	.argument-pool-stance-support {
-		background: var(--color-support-bg);
-		color: var(--color-support);
-		border-color: var(--color-support);
-	}
-	.argument-pool-stance-reject {
-		background: var(--color-reject-bg);
-		color: var(--color-reject);
-		border-color: var(--color-reject);
 	}
 
 	/* Related theses */

@@ -17,7 +17,6 @@ export interface UpdateEvent {
 	fork_content?: string;
 	fork_votes?: number;
 	argument_id?: string;
-	argument_stance?: 'support' | 'reject';
 	argument_content?: string;
 	lifecycle_state?: string;
 }
