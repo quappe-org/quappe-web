@@ -3,6 +3,7 @@
 	import { getUserId } from '$lib/stores/user';
 	import { activityStore } from '$lib/stores/activity.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
+	import ScrollSentinel from '$lib/components/ScrollSentinel.svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let { data } = $props();
@@ -210,6 +211,7 @@
 			</div>
 		{/each}
 		{#if authoredEntries.length > authoredShown}
+			<ScrollSentinel onVisible={() => authoredShown += PAGE} />
 			<div class="load-more-wrap">
 				<button class="btn btn-sm" onclick={() => authoredShown += PAGE}>{m.my_load_more()}</button>
 			</div>
@@ -227,6 +229,7 @@
 			</div>
 		{/each}
 		{#if votedEntries.length > votedShown}
+			<ScrollSentinel onVisible={() => votedShown += PAGE} />
 			<div class="load-more-wrap">
 				<button class="btn btn-sm" onclick={() => votedShown += PAGE}>{m.my_load_more()}</button>
 			</div>
