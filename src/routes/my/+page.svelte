@@ -2,9 +2,7 @@
 	import type { Thesis } from '$lib/models/types';
 	import { getUserId } from '$lib/stores/user';
 	import { activityStore } from '$lib/stores/activity.svelte';
-	import { complexityStore } from '$lib/stores/complexity.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
-	import { onMount } from 'svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let { data } = $props();
@@ -22,22 +20,90 @@
 		activityStore.set(data.activity ?? [], m.my_platform_activity());
 	});
 
-	let authoredTheses = $derived.by(() => {
-		if (typeof window === 'undefined') return [] as Thesis[];
+	// A thesis paired with the timestamp that places it on my timeline:
+	// authored → creation time; voted → the time I cast my vote.
+	interface TimelineEntry {
+		thesis: Thesis;
+		at: string; // ISO
+	}
+
+	let authoredEntries = $derived.by<TimelineEntry[]>(() => {
+		if (typeof window === 'undefined') return [];
 		const userId = getUserId();
-		return allTheses.filter((t) => t.meta.author_id === userId);
+		return allTheses
+			.filter((t) => t.meta.author_id === userId)
+			.map((t) => ({ thesis: t, at: t.meta.created_at }))
+			.sort((a, b) => (a.at < b.at ? 1 : -1));
 	});
 
-	let votedTheses = $derived.by(() => {
-		if (typeof window === 'undefined') return [] as Thesis[];
+	let votedEntries = $derived.by<TimelineEntry[]>(() => {
+		if (typeof window === 'undefined') return [];
 		const userId = getUserId();
-		return allTheses.filter(
-			(t) => t.meta.author_id !== userId && t.votes.some((v) => v.user_id === userId)
-		);
+		const out: TimelineEntry[] = [];
+		for (const t of allTheses) {
+			if (t.meta.author_id === userId) continue;
+			const mine = t.votes.find((v) => v.user_id === userId);
+			if (mine) out.push({ thesis: t, at: mine.cast_at || t.meta.created_at });
+		}
+		return out.sort((a, b) => (a.at < b.at ? 1 : -1));
 	});
 
-	let authoredCapped = $derived(authoredTheses.slice(0, complexityStore.settings.max_theses));
-	let votedCapped = $derived(votedTheses.slice(0, complexityStore.settings.max_theses));
+	// ---- Load-more paging (skips empty periods naturally) ----
+	const PAGE = 20;
+	let authoredShown = $state(PAGE);
+	let votedShown = $state(PAGE);
+
+	let authoredPage = $derived(authoredEntries.slice(0, authoredShown));
+	let votedPage = $derived(votedEntries.slice(0, votedShown));
+
+	// ---- Time grouping with dividers ----
+	// Buckets entries into Today / This week / "Month YYYY" bands. Empty bands
+	// never appear (we only render groups that have entries).
+	interface TimeGroup {
+		key: string;
+		label: string;
+		entries: TimelineEntry[];
+	}
+
+	function startOfDay(d: Date): number {
+		return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+	}
+
+	function groupByTime(entries: TimelineEntry[]): TimeGroup[] {
+		const now = new Date();
+		const todayStart = startOfDay(now);
+		const weekStart = todayStart - 6 * 24 * 60 * 60 * 1000; // last 7 days incl. today
+		const groups: TimeGroup[] = [];
+		const byKey = new Map<string, TimeGroup>();
+
+		for (const e of entries) {
+			const d = new Date(e.at);
+			const t = d.getTime();
+			let key: string;
+			let label: string;
+			if (t >= todayStart) {
+				key = 'today';
+				label = m.my_time_today();
+			} else if (t >= weekStart) {
+				key = 'week';
+				label = m.my_time_week();
+			} else {
+				key = `${d.getFullYear()}-${d.getMonth()}`;
+				label = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+			}
+			let g = byKey.get(key);
+			if (!g) {
+				g = { key, label, entries: [] };
+				byKey.set(key, g);
+				groups.push(g);
+			}
+			g.entries.push(e);
+		}
+		return groups;
+	}
+
+	let authoredGroups = $derived(groupByTime(authoredPage));
+	let votedGroups = $derived(groupByTime(votedPage));
 
 	// ---- Standpoint report ----
 	interface ReportBody {
@@ -75,52 +141,6 @@
 			reportError = (err as Error)?.message ?? m.my_standpoint_unknown_error();
 		} finally {
 			reportLoading = false;
-		}
-	}
-
-	// ---- Budget today ----
-	interface BudgetEvent {
-		kind: 'vote' | 'thesis';
-		at: string;
-		thesis_id: string;
-		thesis_title: string;
-		vote_type?: string;
-		weight?: number;
-		target?: 'thesis' | 'argument';
-	}
-	interface BudgetBody {
-		date: string;
-		votes_spent: number;
-		votes_limit: number;
-		votes_remaining: number;
-		theses_created: number;
-		theses_limit: number;
-		theses_remaining: number;
-		events: BudgetEvent[];
-	}
-	let budget = $state<BudgetBody | null>(null);
-	let budgetLoading = $state(false);
-
-	async function loadBudget() {
-		if (typeof window === 'undefined') return;
-		budgetLoading = true;
-		try {
-			const res = await fetch('/api/budget/today');
-			if (res.ok) budget = await res.json();
-		} finally {
-			budgetLoading = false;
-		}
-	}
-
-	onMount(() => {
-		loadBudget();
-	});
-
-	function fmtTime(iso: string): string {
-		try {
-			return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-		} catch {
-			return iso;
 		}
 	}
 </script>
@@ -179,73 +199,41 @@
 		{/if}
 	</aside>
 
-	<aside id="budget" class="budget-panel card">
-		<div class="budget-head">
-			<h2 class="budget-title">{m.my_budget_title()}</h2>
-			<p class="budget-sub">{m.my_budget_sub({ limit: budget?.votes_limit ?? 62 })}</p>
-		</div>
-
-		{#if budgetLoading && !budget}
-			<p class="budget-status">{m.my_budget_loading()}</p>
-		{:else if budget}
-			<div class="budget-summary">
-				<div class="budget-summary-item">
-					<span class="budget-summary-num">{budget.votes_remaining}/{budget.votes_limit}</span>
-					<span class="budget-summary-label">{m.panel_budget_votes()}</span>
-				</div>
-				<div class="budget-summary-item">
-					<span class="budget-summary-num">{budget.theses_remaining}/{budget.theses_limit}</span>
-					<span class="budget-summary-label">{m.panel_budget_theses()}</span>
-				</div>
-			</div>
-
-			{#if budget.events.length === 0}
-				<p class="budget-empty">{m.my_budget_empty()}</p>
-			{:else}
-				<ul class="budget-list">
-					{#each budget.events as e}
-						<li class="budget-item">
-							<time class="budget-time">{fmtTime(e.at)}</time>
-							<div class="budget-item-body">
-								<a class="budget-link" href="/thesis/{e.thesis_id}">{e.thesis_title}</a>
-								{#if e.kind === 'thesis'}
-									<p class="budget-content">{m.my_budget_thesis_created()}</p>
-								{:else}
-									<p class="budget-content">{m.my_budget_vote_detail({ weight: e.weight ?? 1, vote_type: e.vote_type ?? '', target: e.target === 'argument' ? m.my_budget_weight_on_argument() : m.my_budget_weight_on_thesis() })}</p>
-								{/if}
-							</div>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		{/if}
-	</aside>
-
-	{#if authoredCapped.length > 0}
+	{#if authoredEntries.length > 0}
 		<h2 class="section-title">{m.my_section_authored()}</h2>
-		<div class="grid grid-2">
-			{#each authoredCapped as thesis (thesis.id)}
-				<ThesisCard {thesis} heatRatio={heat[thesis.id] ?? 0} argumentCount={argumentCounts[thesis.id] ?? 0} showVoteButtons={false} />
-			{/each}
-		</div>
-		{#if authoredTheses.length > authoredCapped.length}
-			<p class="complexity-note">{m.complexity_slider_hint()}</p>
+		{#each authoredGroups as group (group.key)}
+			<div class="time-divider">{group.label}</div>
+			<div class="grid grid-2">
+				{#each group.entries as entry (entry.thesis.id)}
+					<ThesisCard thesis={entry.thesis} heatRatio={heat[entry.thesis.id] ?? 0} argumentCount={argumentCounts[entry.thesis.id] ?? 0} showVoteButtons={false} />
+				{/each}
+			</div>
+		{/each}
+		{#if authoredEntries.length > authoredShown}
+			<div class="load-more-wrap">
+				<button class="btn btn-sm" onclick={() => authoredShown += PAGE}>{m.my_load_more()}</button>
+			</div>
 		{/if}
 	{/if}
 
-	{#if votedCapped.length > 0}
+	{#if votedEntries.length > 0}
 		<h2 class="section-title">{m.my_section_voted()}</h2>
-		<div class="grid grid-2">
-			{#each votedCapped as thesis (thesis.id)}
-				<ThesisCard {thesis} heatRatio={heat[thesis.id] ?? 0} argumentCount={argumentCounts[thesis.id] ?? 0} />
-			{/each}
-		</div>
-		{#if votedTheses.length > votedCapped.length}
-			<p class="complexity-note">{m.complexity_slider_hint()}</p>
+		{#each votedGroups as group (group.key)}
+			<div class="time-divider">{group.label}</div>
+			<div class="grid grid-2">
+				{#each group.entries as entry (entry.thesis.id)}
+					<ThesisCard thesis={entry.thesis} heatRatio={heat[entry.thesis.id] ?? 0} argumentCount={argumentCounts[entry.thesis.id] ?? 0} />
+				{/each}
+			</div>
+		{/each}
+		{#if votedEntries.length > votedShown}
+			<div class="load-more-wrap">
+				<button class="btn btn-sm" onclick={() => votedShown += PAGE}>{m.my_load_more()}</button>
+			</div>
 		{/if}
 	{/if}
 
-	{#if authoredTheses.length === 0 && votedTheses.length === 0}
+	{#if authoredEntries.length === 0 && votedEntries.length === 0}
 		<p class="empty-state">{m.my_empty_state()}</p>
 	{/if}
 </section>
@@ -295,12 +283,21 @@
 		margin: 0.5rem 0 0;
 	}
 
-	.complexity-note {
+	.time-divider {
 		font-size: var(--text-xs);
-		color: var(--color-text-muted);
-		text-align: center;
-		margin: 0.25rem 0 0;
-		font-style: italic;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--color-text-light);
+		padding: 0.5rem 0 0.25rem;
+		border-bottom: 1px solid var(--color-border);
+		margin-top: 0.5rem;
+	}
+
+	.load-more-wrap {
+		display: flex;
+		justify-content: center;
+		padding: 0.75rem 0;
 	}
 
 	.standpoint-panel {
@@ -406,116 +403,5 @@
 		font-size: var(--text-xs);
 		color: var(--color-text-muted);
 		margin: 0.25rem 0 0;
-	}
-
-	.budget-panel {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.budget-head {
-		display: flex;
-		flex-direction: column;
-		gap: 0.15rem;
-	}
-
-	.budget-title {
-		font-size: var(--text-lg);
-		font-weight: 600;
-		margin: 0;
-	}
-
-	.budget-sub {
-		font-size: var(--text-sm);
-		color: var(--color-text-muted);
-		margin: 0;
-	}
-
-	.budget-status,
-	.budget-empty {
-		font-size: var(--text-sm);
-		color: var(--color-text-muted);
-		margin: 0;
-	}
-
-	.budget-summary {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-		gap: 0.75rem;
-		padding: 0.75rem 0;
-		border-bottom: 1px dashed var(--color-border);
-	}
-
-	.budget-summary-item {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 0.1rem;
-	}
-
-	.budget-summary-num {
-		font-size: var(--text-xl);
-		font-weight: 700;
-		font-family: var(--font-mono);
-		color: var(--color-text);
-	}
-
-	.budget-summary-label {
-		font-size: var(--text-xs);
-		color: var(--color-text-muted);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
-
-	.budget-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-	}
-
-	.budget-item {
-		display: grid;
-		grid-template-columns: 3rem 1fr;
-		gap: 0.5rem;
-		align-items: baseline;
-		padding: 0.3rem 0.5rem;
-		background: var(--color-bg);
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--color-border);
-	}
-
-	.budget-time {
-		font-size: var(--text-xs);
-		font-family: var(--font-mono);
-		color: var(--color-text-light);
-	}
-
-	.budget-item-body {
-		display: flex;
-		flex-direction: column;
-		gap: 0.15rem;
-		min-width: 0;
-	}
-
-	.budget-link {
-		font-size: var(--text-sm);
-		font-weight: 500;
-		color: var(--color-text);
-		text-decoration: none;
-	}
-
-	.budget-link:hover {
-		color: var(--color-primary);
-	}
-
-	.budget-content {
-		margin: 0;
-		font-size: var(--text-xs);
-		color: var(--color-text-muted);
-		line-height: 1.4;
 	}
 </style>
