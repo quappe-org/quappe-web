@@ -1,8 +1,6 @@
 <script lang="ts">
 	import { updatesStore, type UpdateEvent } from '$lib/stores/updates.svelte';
-	import { updatesSeen } from '$lib/stores/updates-seen.svelte';
-	import { forkFeedStore, type ForkDecision } from '$lib/stores/fork-feed.svelte';
-	import { complexityStore } from '$lib/stores/complexity.svelte';
+	import ScrollSentinel from '$lib/components/ScrollSentinel.svelte';
 	import { onMount } from 'svelte';
 	import { m } from '$lib/paraglide/messages';
 
@@ -10,83 +8,70 @@
 
 	onMount(() => {
 		mounted = true;
-		updatesStore.refresh().then(() => {
-			updatesSeen.markAllSeen();
-		});
+		updatesStore.refresh();
 	});
 
-	let cap = $derived(complexityStore.settings.max_theses * 3);
+	// ---- Type filter ----
+	type Filter = 'all' | 'fork' | 'new_argument' | 'lifecycle';
+	let filter = $state<Filter>('all');
 
-	// Fork decisions come from two sources:
-	// 1. Server-side fork events (from the updates API, within 7-day window)
-	// 2. Client-side pending forks (from forkFeedStore, detected when visiting thesis pages)
-	// Merge them, deduplicating by original+fork ID pair.
-	interface ForkCard {
+	let filtered = $derived.by(() =>
+		filter === 'all'
+			? updatesStore.events
+			: updatesStore.events.filter((e) => e.kind === filter)
+	);
+
+	// ---- Paging (infinite scroll) ----
+	const PAGE = 25;
+	let shown = $state(PAGE);
+	$effect(() => {
+		filter; // reset paging when the filter changes
+		shown = PAGE;
+	});
+	let page = $derived(filtered.slice(0, shown));
+
+	// ---- Time grouping with date separators ----
+	interface TimeGroup {
 		key: string;
-		thesis_id: string;
-		thesis_title: string;
-		original_id: string;
-		original_content: string;
-		original_votes: number;
-		fork_id: string;
-		fork_content: string;
-		fork_votes: number;
-		at: string;
+		label: string;
+		events: UpdateEvent[];
 	}
 
-	let forkCards = $derived.by(() => {
-		const seen = new Set<string>();
-		const cards: ForkCard[] = [];
+	function startOfDay(d: Date): number {
+		return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+	}
 
-		// Server-side fork events first (they have vote counts)
-		for (const e of updatesStore.events) {
-			if (e.kind !== 'fork') continue;
-			if (!e.original_argument_id || !e.fork_argument_id) continue;
-			const key = `${e.original_argument_id}::${e.fork_argument_id}`;
-			if (seen.has(key)) continue;
-			// Skip decisions the user has already made (covers server-sourced
-			// cards too, which aren't in forkFeedStore.pending).
-			if (forkFeedStore.isDecided(e.original_argument_id, e.fork_argument_id)) continue;
-			seen.add(key);
-			cards.push({
-				key,
-				thesis_id: e.thesis_id,
-				thesis_title: e.thesis_title,
-				original_id: e.original_argument_id,
-				original_content: e.original_content ?? '',
-				original_votes: e.original_votes ?? 0,
-				fork_id: e.fork_argument_id,
-				fork_content: e.fork_content ?? '',
-				fork_votes: e.fork_votes ?? 0,
-				at: e.at
-			});
+	let groups = $derived.by<TimeGroup[]>(() => {
+		const now = new Date();
+		const todayStart = startOfDay(now);
+		const weekStart = todayStart - 6 * 24 * 60 * 60 * 1000;
+		const out: TimeGroup[] = [];
+		const byKey = new Map<string, TimeGroup>();
+		for (const e of page) {
+			const d = new Date(e.at);
+			const t = d.getTime();
+			let key: string;
+			let label: string;
+			if (t >= todayStart) {
+				key = 'today';
+				label = m.my_time_today();
+			} else if (t >= weekStart) {
+				key = 'week';
+				label = m.my_time_week();
+			} else {
+				key = `${d.getFullYear()}-${d.getMonth()}`;
+				label = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+			}
+			let g = byKey.get(key);
+			if (!g) {
+				g = { key, label, events: [] };
+				byKey.set(key, g);
+				out.push(g);
+			}
+			g.events.push(e);
 		}
-
-		// Client-side pending forks (no vote counts available)
-		for (const p of forkFeedStore.pending) {
-			const key = `${p.original_id}::${p.fork_id}`;
-			if (seen.has(key)) continue;
-			seen.add(key);
-			cards.push({
-				key,
-				thesis_id: p.thesis_id,
-				thesis_title: p.thesis_title,
-				original_id: p.original_id,
-				original_content: p.original_content,
-				original_votes: 0,
-				fork_id: p.fork_id,
-				fork_content: p.fork_content,
-				fork_votes: 0,
-				at: ''
-			});
-		}
-
-		return cards;
+		return out;
 	});
-
-	let otherEvents = $derived(updatesStore.events.filter((e) => e.kind !== 'fork').slice(0, cap));
-	let isCapped = $derived(updatesStore.events.filter((e) => e.kind !== 'fork').length > otherEvents.length);
-	let hasContent = $derived(forkCards.length > 0 || otherEvents.length > 0);
 
 	function typeLabel(kind: UpdateEvent['kind']): string {
 		if (kind === 'fork') return m.updates_type_fork();
@@ -111,38 +96,72 @@
 		}
 	}
 
-	function eventKey(e: UpdateEvent, idx: number): string {
-		if (e.kind === 'new_argument') return 'a_' + e.argument_id;
-		return 'l_' + e.thesis_id + '_' + e.at + '_' + idx;
+	function markRead(e: UpdateEvent) {
+		if (!e.read) updatesStore.markRead([e.event_key]);
 	}
 
-	function handleKeepOriginal(card: ForkCard) {
-		// Keep the vote where it is (on the original). Just record the decision
-		// so the card stops surfacing.
-		forkFeedStore.resolve(card.original_id, card.fork_id);
+	// ---- Fork inline decision ----
+	async function keepOriginal(e: UpdateEvent) {
+		markRead(e);
 	}
 
-	async function handleSwitchToFork(card: ForkCard) {
-		// Record the decision immediately for instant UI feedback…
-		forkFeedStore.resolve(card.original_id, card.fork_id);
-		// …then migrate the user's support to the fork. The server enforces one
-		// vote per fork group, so a support vote here moves it off the original.
+	async function switchToFork(e: UpdateEvent) {
+		markRead(e);
+		if (!e.fork_argument_id) return;
 		try {
-			await fetch(`/api/arguments/${card.fork_id}/vote`, {
+			await fetch(`/api/arguments/${e.fork_argument_id}/vote`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ type: 'support', weight: 1 })
 			});
 		} catch {
-			// non-fatal — the decision is already recorded
+			// non-fatal
 		}
 	}
 
-	// Carousel state for fork cards — kept in range as cards resolve away.
-	let forkIndex = $state(0);
-	$effect(() => {
-		if (forkIndex > forkCards.length - 1) forkIndex = Math.max(0, forkCards.length - 1);
-	});
+	// ---- Swipe to mark read (touch) ----
+	let swipeState = $state<{ key: string; dx: number } | null>(null);
+	let sStartX = 0;
+	let sStartY = 0;
+	let sActive = false;
+	let sAxis: 'x' | 'y' | null = null;
+	const SWIPE_THRESHOLD = 70;
+
+	function onDown(e: PointerEvent, ev: UpdateEvent) {
+		if (e.pointerType === 'mouse') return;
+		sActive = true;
+		sStartX = e.clientX;
+		sStartY = e.clientY;
+		sAxis = null;
+		swipeState = { key: ev.event_key, dx: 0 };
+	}
+	function onMove(e: PointerEvent, ev: UpdateEvent) {
+		if (!sActive || !swipeState || swipeState.key !== ev.event_key) return;
+		const rawDx = e.clientX - sStartX;
+		const rawDy = e.clientY - sStartY;
+		if (!sAxis) {
+			if (Math.abs(rawDx) < 6 && Math.abs(rawDy) < 6) return;
+			if (Math.abs(rawDx) > Math.abs(rawDy) * 1.5) sAxis = 'x';
+			else {
+				sAxis = 'y';
+				sActive = false;
+				swipeState = null;
+				return;
+			}
+		}
+		if (sAxis !== 'x') return;
+		e.preventDefault();
+		swipeState = { key: ev.event_key, dx: rawDx };
+	}
+	function onUp(ev: UpdateEvent) {
+		if (!sActive) return;
+		const dx = swipeState?.dx ?? 0;
+		sActive = false;
+		if (Math.abs(dx) >= SWIPE_THRESHOLD) markRead(ev);
+		swipeState = null;
+	}
+
+	let hasContent = $derived(updatesStore.events.length > 0);
 </script>
 
 <section class="updates-page">
@@ -151,7 +170,21 @@
 		<p class="page-subtitle">{m.updates_page_subtitle()}</p>
 	</div>
 
-	{#if updatesStore.loading && updatesStore.events.length === 0 && forkFeedStore.pending.length === 0}
+	{#if hasContent}
+		<div class="updates-toolbar">
+			<div class="type-filter" role="group" aria-label={m.updates_filter_label()}>
+				<button class="tf-btn" class:active={filter === 'all'} onclick={() => filter = 'all'}>{m.updates_filter_all()}</button>
+				<button class="tf-btn" class:active={filter === 'new_argument'} onclick={() => filter = 'new_argument'}>{m.updates_type_newarg()}</button>
+				<button class="tf-btn" class:active={filter === 'fork'} onclick={() => filter = 'fork'}>{m.updates_type_fork()}</button>
+				<button class="tf-btn" class:active={filter === 'lifecycle'} onclick={() => filter = 'lifecycle'}>{m.updates_type_lifecycle()}</button>
+			</div>
+			{#if updatesStore.unread > 0}
+				<button class="mark-all-btn" onclick={() => updatesStore.markAllRead()}>{m.updates_mark_all_read()}</button>
+			{/if}
+		</div>
+	{/if}
+
+	{#if updatesStore.loading && updatesStore.events.length === 0}
 		<p class="updates-status">{m.updates_loading()}</p>
 	{:else if mounted && !hasContent}
 		<div class="updates-empty card">
@@ -159,133 +192,68 @@
 			<p>{m.updates_empty_body()}</p>
 		</div>
 	{:else if mounted}
-
-		<!-- FORK DECISIONS: carousel at top -->
-		{#if forkCards.length > 0}
-			{@const card = forkCards[forkIndex]}
-			{@const forkLeads = card.fork_votes > card.original_votes}
-			<div class="fork-section">
-				<div class="fork-section-header">
-					<h2 class="fork-section-title">{m.updates_type_fork()}</h2>
-					{#if forkCards.length > 1}
-						<span class="fork-counter">{forkIndex + 1} / {forkCards.length}</span>
-					{/if}
-				</div>
-
-				<div class="fork-carousel">
-					{#if forkCards.length > 1}
-						<button
-							class="fork-nav fork-nav-prev"
-							disabled={forkIndex === 0}
-							onclick={() => forkIndex--}
-							aria-label="Previous"
-						>&lsaquo;</button>
-					{/if}
-
-					<div class="fork-card card" class:updates-new={card.at ? updatesSeen.isNew(card.at) : true}>
-						<div class="fork-card-header">
-							<a class="fork-thesis-link" href="/thesis/{card.thesis_id}">{card.thesis_title}</a>
-							{#if card.at}
-								<time class="updates-time">{fmtTime(card.at)}</time>
-							{/if}
-						</div>
-
-						<div class="fork-candidates">
-							{#if forkLeads}
-								<div class="fork-candidate fork-candidate-leader">
-									<span class="fork-label fork-label-new">Fork</span>
-									<p class="fork-candidate-text">{card.fork_content}</p>
-									{#if card.fork_votes > 0 || card.original_votes > 0}
-										<span class="fork-votes">{card.fork_votes}</span>
-									{/if}
-								</div>
-								<div class="fork-candidate fork-candidate-trailing">
-									<span class="fork-label fork-label-original">Original</span>
-									<p class="fork-candidate-text">{card.original_content}</p>
-									{#if card.fork_votes > 0 || card.original_votes > 0}
-										<span class="fork-votes">{card.original_votes}</span>
-									{/if}
-								</div>
-							{:else}
-								<div class="fork-candidate fork-candidate-leader">
-									<span class="fork-label fork-label-original">Original</span>
-									<p class="fork-candidate-text">{card.original_content}</p>
-									{#if card.fork_votes > 0 || card.original_votes > 0}
-										<span class="fork-votes">{card.original_votes}</span>
-									{/if}
-								</div>
-								<div class="fork-candidate fork-candidate-trailing">
-									<span class="fork-label fork-label-new">Fork</span>
-									<p class="fork-candidate-text">{card.fork_content}</p>
-									{#if card.fork_votes > 0 || card.original_votes > 0}
-										<span class="fork-votes">{card.fork_votes}</span>
-									{/if}
-								</div>
-							{/if}
-						</div>
-
-						<div class="fork-actions">
-							<button
-								class="fork-action-btn"
-								onclick={() => handleKeepOriginal(card)}
-							>{m.panel_fork_updates_keep_old()}</button>
-							<button
-								class="fork-action-btn fork-action-switch"
-								onclick={() => handleSwitchToFork(card)}
-							>{m.panel_fork_updates_switch_new()}</button>
-						</div>
-					</div>
-
-					{#if forkCards.length > 1}
-						<button
-							class="fork-nav fork-nav-next"
-							disabled={forkIndex >= forkCards.length - 1}
-							onclick={() => forkIndex++}
-							aria-label="Next"
-						>&rsaquo;</button>
-					{/if}
-				</div>
-
-				{#if forkCards.length > 1}
-					<div class="fork-dots">
-						{#each forkCards as _, idx}
-							<button
-								class="fork-dot"
-								class:fork-dot-active={idx === forkIndex}
-								onclick={() => forkIndex = idx}
-								aria-label="Go to fork {idx + 1}"
-							></button>
-						{/each}
-					</div>
-				{/if}
-			</div>
-		{/if}
-
-		<!-- OTHER EVENTS: normal chronological stream -->
-		{#if otherEvents.length > 0}
+		{#each groups as group (group.key)}
+			<div class="time-divider">{group.label}</div>
 			<ul class="updates-list">
-				{#each otherEvents as e, i (eventKey(e, i))}
-					<li class="updates-item card" class:updates-new={updatesSeen.isNew(e.at)}>
+				{#each group.events as e (e.event_key)}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<li
+						class="updates-item card updates-{e.kind}"
+						class:is-read={e.read}
+						style={swipeState?.key === e.event_key ? `transform: translateX(${swipeState.dx}px)` : ''}
+						onpointerdown={(ev) => onDown(ev, e)}
+						onpointermove={(ev) => onMove(ev, e)}
+						onpointerup={() => onUp(e)}
+						onpointercancel={() => { sActive = false; swipeState = null; }}
+					>
 						<div class="updates-item-row">
 							<span class="updates-type updates-type-{e.kind}">{typeLabel(e.kind)}</span>
 							<time class="updates-time">{fmtTime(e.at)}</time>
 							{#if e.kind === 'lifecycle' && e.lifecycle_state}
 								<span class="updates-lifecycle-state">{e.lifecycle_state}</span>
 							{/if}
-							<a class="updates-thesis" href="/thesis/{e.thesis_id}">{e.thesis_title}</a>
+							<a class="updates-thesis" href="/thesis/{e.thesis_id}" onclick={() => markRead(e)}>{e.thesis_title}</a>
+							{#if !e.read}<span class="unread-dot" aria-label={m.updates_unread()}></span>{/if}
 						</div>
 
 						{#if e.kind === 'new_argument'}
 							<p class="updates-content">{e.argument_content}</p>
 						{:else if e.kind === 'lifecycle'}
 							<p class="updates-content-muted">{m.updates_lifecycle_now({ state: e.lifecycle_state ?? '' })}</p>
+						{:else if e.kind === 'fork'}
+							<div class="fork-inline">
+								<div class="fork-inline-pair">
+									<div class="fork-inline-side">
+										<span class="fork-inline-label">{m.updates_fork_original()}</span>
+										<p class="fork-inline-text">{e.original_content}</p>
+										<span class="fork-inline-votes">{e.original_votes ?? 0}</span>
+									</div>
+									<div class="fork-inline-side">
+										<span class="fork-inline-label fork-inline-label-new">{m.updates_fork_variant()}</span>
+										<p class="fork-inline-text">{e.fork_content}</p>
+										<span class="fork-inline-votes">{e.fork_votes ?? 0}</span>
+									</div>
+								</div>
+								<div class="fork-inline-actions">
+									<button class="fork-inline-btn" onclick={() => keepOriginal(e)}>{m.panel_fork_updates_keep_old()}</button>
+									<button class="fork-inline-btn fork-inline-switch" onclick={() => switchToFork(e)}>{m.panel_fork_updates_switch_new()}</button>
+								</div>
+							</div>
 						{/if}
 					</li>
 				{/each}
 			</ul>
-			{#if isCapped}
-				<p class="complexity-note">{m.complexity_slider_hint()}</p>
-			{/if}
+		{/each}
+
+		{#if filtered.length > shown}
+			<ScrollSentinel onVisible={() => shown += PAGE} />
+			<div class="load-more-wrap">
+				<button class="btn btn-sm" onclick={() => shown += PAGE}>{m.my_load_more()}</button>
+			</div>
+		{/if}
+
+		{#if filtered.length === 0}
+			<p class="updates-status">{m.updates_filter_empty()}</p>
 		{/if}
 	{/if}
 </section>
@@ -294,7 +262,7 @@
 	.updates-page {
 		display: flex;
 		flex-direction: column;
-		gap: 1.5rem;
+		gap: 1rem;
 	}
 
 	.updates-page :global(.card) {
@@ -324,6 +292,8 @@
 	.updates-status {
 		font-size: var(--text-sm);
 		color: var(--color-text-muted);
+		text-align: center;
+		padding: 1rem;
 	}
 
 	.updates-empty {
@@ -342,218 +312,72 @@
 		color: var(--color-text-muted);
 	}
 
-	/* ---- Fork section (carousel) ---- */
-	.fork-section {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.fork-section-header {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-	}
-
-	.fork-section-title {
-		font-size: var(--text-sm);
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: #9a3412;
-		margin: 0;
-	}
-
-	.fork-counter {
-		font-size: var(--text-xs);
-		color: var(--color-text-muted);
-		font-family: var(--font-mono);
-	}
-
-	.fork-carousel {
-		display: flex;
-		align-items: stretch;
-		gap: 0.4rem;
-	}
-
-	.fork-nav {
+	/* ---- Toolbar: type filter + mark all ---- */
+	.updates-toolbar {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		width: 1.8rem;
-		flex-shrink: 0;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg);
-		color: var(--color-text);
-		font-size: 1.2rem;
-		cursor: pointer;
-		transition: background var(--transition-base);
-	}
-
-	.fork-nav:hover:not(:disabled) {
-		background: var(--color-border);
-	}
-
-	.fork-nav:disabled {
-		opacity: 0.3;
-		cursor: default;
-	}
-
-	.fork-dots {
-		display: flex;
-		justify-content: center;
-		gap: 0.35rem;
-	}
-
-	.fork-dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		border: none;
-		background: var(--color-border);
-		cursor: pointer;
-		padding: 0;
-		transition: background var(--transition-base);
-	}
-
-	.fork-dot-active {
-		background: #f97316;
-	}
-
-	.fork-card {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		border-color: #fed7aa;
-		background: #fffbf7;
-		flex: 1;
-		min-width: 0;
-	}
-
-	.fork-card.updates-new {
-		border-color: #f97316;
-	}
-
-	.fork-card-header {
-		display: flex;
-		align-items: baseline;
 		justify-content: space-between;
 		gap: 0.5rem;
+		flex-wrap: wrap;
 	}
 
-	.fork-thesis-link {
-		font-size: var(--text-sm);
-		font-weight: 600;
-		color: var(--color-text);
-		text-decoration: none;
+	.type-filter {
+		display: inline-flex;
+		gap: 2px;
+		background: var(--color-border);
+		border-radius: var(--radius-md);
 		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		min-width: 0;
+		flex-wrap: wrap;
 	}
 
-	.fork-thesis-link:hover {
-		color: var(--color-primary);
-	}
-
-	.fork-candidates {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-	}
-
-	.fork-candidate {
-		display: flex;
-		align-items: baseline;
-		gap: 0.5rem;
-		padding: 0.4rem 0.6rem;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--color-border);
-	}
-
-	.fork-candidate-leader {
-		background: var(--color-bg);
-	}
-
-	.fork-candidate-trailing {
-		background: var(--color-surface);
-		opacity: 0.8;
-	}
-
-	.fork-label {
-		font-size: 0.6rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		flex-shrink: 0;
-		padding: 0.1rem 0.3rem;
-		border-radius: var(--radius-sm);
-	}
-
-	.fork-label-original {
+	.tf-btn {
+		padding: 0.45rem 0.9rem;
+		font-size: var(--text-sm);
+		font-weight: 500;
+		font-family: inherit;
 		background: var(--color-surface);
 		color: var(--color-text-muted);
-	}
-
-	.fork-label-new {
-		background: #ecfdf5;
-		color: #059669;
-	}
-
-	.fork-candidate-text {
-		margin: 0;
-		font-size: var(--text-xs);
-		line-height: 1.4;
-		color: var(--color-text);
-		flex: 1;
-		min-width: 0;
-	}
-
-	.fork-votes {
-		font-size: 0.65rem;
-		font-weight: 600;
-		color: var(--color-text-light);
-		flex-shrink: 0;
-		font-family: var(--font-mono);
-	}
-
-	.fork-actions {
-		display: flex;
-		gap: 0.5rem;
-	}
-
-	.fork-action-btn {
-		flex: 1;
-		font-size: var(--text-xs);
-		padding: 0.3rem 0.5rem;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--color-border);
-		background: var(--color-bg);
-		color: var(--color-text);
+		border: none;
 		cursor: pointer;
-		text-align: center;
-		transition: background var(--transition-base), border-color var(--transition-base);
+		transition: background var(--transition-fast), color var(--transition-fast);
 	}
 
-	.fork-action-btn:hover {
-		background: var(--color-border);
+	.tf-btn:hover {
+		color: var(--color-text);
 	}
 
-	.fork-action-switch {
-		background: #ecfdf5;
-		border-color: #6ee7b7;
-		color: #059669;
+	.tf-btn.active {
+		background: var(--color-primary-bg);
+		color: var(--color-primary);
 		font-weight: 600;
 	}
 
-	.fork-action-switch:hover {
-		background: #059669;
-		border-color: #059669;
-		color: white;
+	.mark-all-btn {
+		font-size: var(--text-sm);
+		background: none;
+		border: none;
+		color: var(--color-primary);
+		cursor: pointer;
+		font-family: inherit;
+		padding: 0.3rem 0.5rem;
 	}
 
-	/* ---- Updates stream ---- */
+	.mark-all-btn:hover {
+		text-decoration: underline;
+	}
+
+	/* ---- Date separators ---- */
+	.time-divider {
+		font-size: var(--text-xs);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--color-text-light);
+		padding: 0.5rem 0 0.25rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	/* ---- Unified list ---- */
 	.updates-list {
 		list-style: none;
 		margin: 0;
@@ -566,29 +390,20 @@
 	.updates-item {
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
+		gap: 0.4rem;
 		position: relative;
-		transition: opacity var(--transition-base);
+		touch-action: pan-y;
+		border-left: 3px solid transparent;
+		transition: opacity var(--transition-base), transform 0.18s ease-out;
 	}
 
-	.updates-item:not(.updates-new) {
-		opacity: 0.72;
+	.updates-item.is-read {
+		opacity: 0.6;
 	}
 
-	.updates-item.updates-new::before {
-		content: '';
-		position: absolute;
-		left: -3px;
-		top: 0.9rem;
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: var(--color-primary);
-	}
-
-	.updates-item.updates-new {
-		border-color: var(--color-primary-bg);
-	}
+	.updates-item.updates-fork { border-left-color: #f97316; }
+	.updates-item.updates-new_argument { border-left-color: var(--color-primary); }
+	.updates-item.updates-lifecycle { border-left-color: #8b5cf6; }
 
 	.updates-item-row {
 		display: flex;
@@ -608,20 +423,9 @@
 		flex-shrink: 0;
 	}
 
-	.updates-type-fork {
-		background: #ffedd5;
-		color: #9a3412;
-	}
-
-	.updates-type-new_argument {
-		background: var(--color-primary-bg);
-		color: var(--color-primary);
-	}
-
-	.updates-type-lifecycle {
-		background: #ede9fe;
-		color: #5b21b6;
-	}
+	.updates-type-fork { background: #ffedd5; color: #9a3412; }
+	.updates-type-new_argument { background: var(--color-primary-bg); color: var(--color-primary); }
+	.updates-type-lifecycle { background: #ede9fe; color: #5b21b6; }
 
 	.updates-time {
 		font-family: var(--font-mono);
@@ -645,6 +449,14 @@
 		color: var(--color-primary);
 	}
 
+	.unread-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--color-primary);
+		flex-shrink: 0;
+	}
+
 	.updates-lifecycle-state {
 		display: inline-block;
 		padding: 0.05rem 0.35rem;
@@ -659,23 +471,106 @@
 	.updates-content,
 	.updates-content-muted {
 		margin: 0;
-		font-size: var(--text-xs);
-		line-height: 1.4;
+		font-size: var(--text-sm);
+		line-height: 1.45;
 	}
 
-	.updates-content {
-		color: var(--color-text);
+	.updates-content { color: var(--color-text); }
+	.updates-content-muted { color: var(--color-text-muted); }
+
+	/* ---- Inline fork decision ---- */
+	.fork-inline {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
 	}
 
-	.updates-content-muted {
+	.fork-inline-pair {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem;
+	}
+
+	@media (max-width: 480px) {
+		.fork-inline-pair {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	.fork-inline-side {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.4rem 0.6rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg);
+	}
+
+	.fork-inline-label {
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
 		color: var(--color-text-muted);
 	}
 
-	.complexity-note {
-		text-align: center;
+	.fork-inline-label-new {
+		color: #059669;
+	}
+
+	.fork-inline-text {
+		margin: 0;
 		font-size: var(--text-xs);
+		line-height: 1.4;
+		color: var(--color-text);
+	}
+
+	.fork-inline-votes {
+		font-size: 0.65rem;
+		font-weight: 600;
 		color: var(--color-text-light);
-		font-style: italic;
-		margin: 0.25rem 0 0;
+		font-family: var(--font-mono);
+	}
+
+	.fork-inline-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.fork-inline-btn {
+		flex: 1;
+		font-size: var(--text-xs);
+		padding: 0.35rem 0.5rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border);
+		background: var(--color-bg);
+		color: var(--color-text);
+		cursor: pointer;
+		font-family: inherit;
+		transition: background var(--transition-base), border-color var(--transition-base);
+	}
+
+	.fork-inline-btn:hover {
+		background: var(--color-border);
+	}
+
+	.fork-inline-switch {
+		background: #ecfdf5;
+		border-color: #6ee7b7;
+		color: #059669;
+		font-weight: 600;
+	}
+
+	.fork-inline-switch:hover {
+		background: #059669;
+		border-color: #059669;
+		color: white;
+	}
+
+	.load-more-wrap {
+		display: flex;
+		justify-content: center;
+		padding: 0.75rem 0;
 	}
 </style>

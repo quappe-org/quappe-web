@@ -6,7 +6,6 @@
 	import { uiIntents } from '$lib/stores/ui.svelte';
 	import { forkFeedStore } from '$lib/stores/fork-feed.svelte';
 	import { updatesStore } from '$lib/stores/updates.svelte';
-	import { updatesSeen } from '$lib/stores/updates-seen.svelte';
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import { invertStore } from '$lib/stores/invert.svelte';
 	import { a11yStore } from '$lib/stores/a11y.svelte';
@@ -74,7 +73,7 @@
 		return currentPath.startsWith(path);
 	}
 
-	let unreadCount = $derived(updatesSeen.unreadCount(updatesStore.events) + forkFeedStore.pending.length);
+	let unreadCount = $derived(updatesStore.unread + forkFeedStore.pending.length);
 
 	async function newThesis() {
 		closeAllPopovers();
