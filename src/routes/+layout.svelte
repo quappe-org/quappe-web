@@ -210,7 +210,7 @@
 				</button>
 
 				<!-- Complexity -->
-				<div class="pop-wrap">
+				<div class="pop-wrap secondary-action">
 					<button class="action-btn icon-only" class:on={sliderOpen} onclick={toggleSlider} title={m.panel_complexity_title()} aria-label={m.panel_complexity_title()} aria-expanded={sliderOpen}>
 						<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
 					</button>
@@ -226,7 +226,7 @@
 				</div>
 
 				<!-- Budget -->
-				<div class="pop-wrap">
+				<div class="pop-wrap secondary-action">
 					<button class="action-btn budget-pill" class:on={budgetOpen} onclick={toggleBudget} title={m.panel_budget_title()} aria-expanded={budgetOpen}>
 						<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
 						{#if mounted}<span class="budget-pill-num" class:low={budgetPillValue === 0}>{budgetPillValue}</span>{/if}
@@ -271,7 +271,7 @@
 				</div>
 
 				<!-- Theme + accessibility -->
-				<div class="pop-wrap">
+				<div class="pop-wrap secondary-action">
 					<button class="action-btn icon-only" class:on={themeOpen} onclick={toggleTheme} title={m.panel_theme_title()} aria-label={m.panel_theme_title()} aria-expanded={themeOpen}>
 						<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="10.5" r="2.5"></circle><circle cx="8.5" cy="7.5" r="2.5"></circle><circle cx="6.5" cy="12.5" r="2.5"></circle><path d="M12 2a10 10 0 0 0 0 20 3 3 0 0 0 3-3 2 2 0 0 1 2-2h1a4 4 0 0 0 4-4 10 10 0 0 0-10-11z"></path></svg>
 					</button>
@@ -323,6 +323,9 @@
 					</button>
 					{#if menuOpen}
 						<div class="popover pop-menu">
+							<button type="button" class="menu-item menu-item-mobile" onclick={toggleSlider}>{m.panel_complexity_title()}</button>
+							<button type="button" class="menu-item menu-item-mobile" onclick={toggleBudget}>{m.panel_budget_title()}</button>
+							<button type="button" class="menu-item menu-item-mobile" onclick={toggleTheme}>{m.panel_theme_title()}</button>
 							<a href="/about" class="menu-item" class:active={isActive('/about')} onclick={closeAllPopovers}>{m.nav_about()}</a>
 							<a href="/settings" class="menu-item" class:active={isActive('/settings')} onclick={closeAllPopovers}>{m.nav_settings()}</a>
 						</div>
@@ -344,6 +347,18 @@
 	<main class="main">
 		{@render children()}
 	</main>
+
+	<!-- Mobile-only bottom tab bar (primary nav) -->
+	<nav class="bottomnav" aria-label="Primary">
+		<a href="/" class="bottomnav-item" class:active={isActive('/')}>{m.nav_short_trending()}</a>
+		<a href="/top" class="bottomnav-item" class:active={isActive('/top')}>{m.nav_short_top()}</a>
+		<a href="/my" class="bottomnav-item" class:active={isActive('/my')}>{m.nav_short_my()}</a>
+		<a href="/my/updates" class="bottomnav-item bottomnav-updates" class:active={isActive('/my/updates')}>
+			{m.nav_short_updates()}
+			{#if mounted && unreadCount > 0}<span class="nav-badge">{unreadCount}</span>{/if}
+		</a>
+		<a href="/pulse" class="bottomnav-item" class:active={isActive('/pulse')}>{m.nav_short_pulse()}</a>
+	</nav>
 </div>
 
 {#if mounted && onboardingStore.open}
@@ -713,6 +728,22 @@
 	.menu-item:hover { background: var(--color-bg); color: var(--color-text); }
 	.menu-item.active { color: var(--color-primary); font-weight: 600; }
 
+	/* menu-item as a button (mobile popover triggers) resets */
+	button.menu-item {
+		width: 100%;
+		text-align: left;
+		font-family: inherit;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+	}
+
+	/* Mobile-only overflow-menu entries (hidden on desktop) */
+	.menu-item-mobile { display: none; }
+
+	/* ---- Bottom tab bar (mobile only) ---- */
+	.bottomnav { display: none; }
+
 	/* ---- Budget list (inside popover) ---- */
 	.budget-list {
 		display: flex;
@@ -816,24 +847,66 @@
 			gap: 0.75rem;
 		}
 		.brand-name { display: none; }
-		.topnav {
-			gap: 0;
-			overflow-x: auto;
-			scrollbar-width: none;
-			min-width: 0;
-			flex: 1;
-		}
-		.topnav::-webkit-scrollbar { display: none; }
-		.topnav-item { padding: 0.4rem 0.5rem; }
+		/* Primary nav moves to the bottom tab bar on mobile. */
+		.topnav { display: none; }
+		/* Secondary popover triggers move into the overflow menu on mobile. */
+		.secondary-action { display: none; }
+		.menu-item-mobile { display: block; }
 		.action-new-label { display: none; }
 		.action-new { width: 2.1rem; padding: 0; }
-		.main { padding: 1.5rem 1rem 3rem; }
+		.actions { margin-left: auto; }
+		.main { padding: 1.5rem 1rem calc(4rem + env(safe-area-inset-bottom, 0px)); }
 		/* Kill backdrop-filter when a popover is open so position:fixed
 		   escapes to viewport (backdrop-filter creates a containing block). */
 		.topbar.popover-active {
 			backdrop-filter: none;
 			-webkit-backdrop-filter: none;
 		}
-		.popover { position: fixed; top: auto; bottom: 0; left: 0; right: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; min-width: 0; max-height: 70dvh; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom, 0); }
+		.popover {
+			position: fixed;
+			top: auto;
+			bottom: 0;
+			left: 0;
+			right: 0;
+			z-index: 120;
+			border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+			min-width: 0;
+			max-height: min(70dvh, 70vh);
+			overflow-y: auto;
+			-webkit-overflow-scrolling: touch;
+			padding-bottom: env(safe-area-inset-bottom, 0);
+		}
+
+		/* Fixed bottom tab bar for primary navigation. */
+		.bottomnav {
+			display: flex;
+			position: fixed;
+			bottom: 0;
+			left: 0;
+			right: 0;
+			z-index: 90;
+			background: var(--color-surface);
+			border-top: 1px solid var(--color-border);
+			padding-bottom: env(safe-area-inset-bottom, 0);
+		}
+		.bottomnav-item {
+			flex: 1;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			gap: 0.3rem;
+			padding: 0.7rem 0.25rem;
+			font-size: var(--text-xs);
+			font-weight: 500;
+			color: var(--color-text-muted);
+			text-decoration: none;
+			text-align: center;
+			white-space: nowrap;
+			transition: color var(--transition-fast);
+		}
+		.bottomnav-item.active {
+			color: var(--color-primary);
+			font-weight: 600;
+		}
 	}
 </style>

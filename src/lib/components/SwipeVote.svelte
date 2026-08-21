@@ -7,9 +7,19 @@
 		children: Snippet;
 		oncast?: (type: VoteType, weight: number) => void;
 		enabled?: boolean;
+		allowNeutral?: boolean; // double-tap → neutral (theses only; off for arguments)
+		positiveLabel?: string;
+		negativeLabel?: string;
 	}
 
-	let { children, oncast, enabled = true }: Props = $props();
+	let {
+		children,
+		oncast,
+		enabled = true,
+		allowNeutral = true,
+		positiveLabel = 'support',
+		negativeLabel = 'reject'
+	}: Props = $props();
 
 	let root = $state<HTMLElement | null>(null);
 	let dx = $state(0);
@@ -83,8 +93,8 @@
 			return;
 		}
 
-		// Double-tap → neutral (only if pointer barely moved)
-		if (!wasDragging && Math.abs(e.clientX - startX) < TAP_MAX_MOVE && Math.abs(e.clientY - startY) < TAP_MAX_MOVE) {
+		// Double-tap → neutral (only if pointer barely moved, and neutral allowed)
+		if (allowNeutral && !wasDragging && Math.abs(e.clientX - startX) < TAP_MAX_MOVE && Math.abs(e.clientY - startY) < TAP_MAX_MOVE) {
 			const now = performance.now();
 			if (
 				now - lastTapAt < DOUBLE_TAP_MS &&
@@ -128,7 +138,7 @@
 	{#if dragging && Math.abs(dx) > 20}
 		<div class="swipe-overlay" aria-hidden="true">
 			<span class="swipe-label" style="color: {tintColor}">
-				{#if dx > 0}✓ support{:else}✗ reject{/if}
+				{#if dx > 0}✓ {positiveLabel}{:else}✗ {negativeLabel}{/if}
 			</span>
 		</div>
 	{/if}
