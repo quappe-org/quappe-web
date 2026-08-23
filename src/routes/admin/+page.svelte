@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { categoriesStore } from '$lib/stores/categories.svelte';
+	import { adminSecret } from '$lib/stores/admin-secret.svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let bannerText = $state('');
 	let saved = $state(false);
 	let loading = $state(true);
 	let newCategory = $state('');
+	let authError = $state(false);
+	let secretInput = $state('');
 
 	interface UserStats {
 		total_users: number;
@@ -14,7 +17,9 @@
 	}
 	let stats = $state<UserStats | null>(null);
 
-	onMount(async () => {
+	async function loadAdminData() {
+		authError = false;
+		// Banner GET is public; used to prefill the editor.
 		const res = await fetch('/api/admin/banner');
 		if (res.ok) {
 			const data = await res.json();
@@ -22,18 +27,36 @@
 		}
 		loading = false;
 
-		const statsRes = await fetch('/api/admin/users?days=30');
+		// Stats require admin — surfaces whether the secret is valid.
+		const statsRes = await fetch('/api/admin/users?days=30', { headers: adminSecret.headers() });
+		if (statsRes.status === 403) {
+			authError = true;
+			stats = null;
+			return;
+		}
 		if (statsRes.ok) {
 			stats = await statsRes.json();
 		}
-	});
+	}
+
+	onMount(loadAdminData);
+
+	function submitSecret() {
+		adminSecret.set(secretInput);
+		secretInput = '';
+		loadAdminData();
+	}
 
 	async function saveBanner() {
 		const res = await fetch('/api/admin/banner', {
 			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
+			headers: { 'Content-Type': 'application/json', ...adminSecret.headers() },
 			body: JSON.stringify({ text: bannerText })
 		});
+		if (res.status === 403) {
+			authError = true;
+			return;
+		}
 		if (res.ok) {
 			saved = true;
 			setTimeout(() => { saved = false; }, 2000);
@@ -59,6 +82,32 @@
 
 <section class="stack-lg">
 	<h1 class="page-title">Admin</h1>
+
+	<div class="card stack">
+		<div class="setting-group">
+			<h3 class="setting-label">Operator access</h3>
+			<p class="setting-hint">
+				Admin actions (banner, stats, logs, archiving) require the operator secret
+				(QUAPPE_ADMIN_SECRET). It's kept for this browser session only.
+			</p>
+		</div>
+		{#if authError}
+			<p class="auth-error">Secret missing or invalid — admin actions are locked.</p>
+		{/if}
+		<form class="secret-form" onsubmit={(e) => { e.preventDefault(); submitSecret(); }}>
+			<input
+				type="password"
+				bind:value={secretInput}
+				placeholder={adminSecret.secret ? '•••••••• (set — re-enter to change)' : 'Enter admin secret'}
+				class="secret-input"
+				autocomplete="off"
+			/>
+			<button class="btn btn-primary btn-sm" type="submit" disabled={!secretInput.trim()}>Unlock</button>
+			{#if adminSecret.secret}
+				<button class="btn btn-sm" type="button" onclick={() => adminSecret.clear()}>Clear</button>
+			{/if}
+		</form>
+	</div>
 
 	<div class="card stack">
 		<div class="setting-group">
@@ -156,6 +205,32 @@
 		font-family: var(--font-serif);
 		font-size: 1.5rem;
 		font-weight: 600;
+	}
+
+	.secret-form {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+
+	.secret-input {
+		flex: 1;
+		min-width: 12rem;
+		padding: 0.4rem 0.6rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		font-family: inherit;
+		font-size: var(--text-sm);
+		background: var(--color-bg);
+		color: var(--color-text);
+	}
+
+	.auth-error {
+		margin: 0;
+		font-size: var(--text-sm);
+		color: var(--color-reject);
+		font-weight: 500;
 	}
 
 	.stat-total {

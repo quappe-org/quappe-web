@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { LogEntry, LogLevel, LogSource } from '$lib/models/contract';
+	import { adminSecret } from '$lib/stores/admin-secret.svelte';
 
 	type TierStats = { hot: number; warm: number; cold: number; total: number };
 	type LogStats = { total: number; buffered: number; capacity: number };
@@ -29,7 +30,7 @@
 		params.set('limit', '500');
 
 		try {
-			const res = await fetch(`/api/admin/logs?${params}`);
+			const res = await fetch(`/api/admin/logs?${params}`, { headers: adminSecret.headers() });
 			if (!res.ok) return;
 			const data = await res.json();
 			stats = data.stats;
@@ -48,7 +49,7 @@
 
 	async function clearBuffer() {
 		if (!confirm('Clear the log buffer on the server?')) return;
-		await fetch('/api/admin/logs', { method: 'DELETE' });
+		await fetch('/api/admin/logs', { method: 'DELETE', headers: adminSecret.headers() });
 		entries = [];
 		lastSeq = 0;
 		fetchLogs(true);
