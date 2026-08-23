@@ -329,9 +329,20 @@
 					</button>
 					{#if menuOpen}
 						<div class="popover pop-menu">
+							<!-- Primary navigation (mobile only — desktop has the top nav) -->
+							<a href="/" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/')} onclick={closeAllPopovers}>{m.nav_trending()}</a>
+							<a href="/top" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/top')} onclick={closeAllPopovers}>{m.nav_top()}</a>
+							<a href="/my" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/my')} onclick={closeAllPopovers}>{m.nav_my_theses()}</a>
+							<a href="/my/updates" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/my/updates')} onclick={closeAllPopovers}>
+								{m.nav_updates()}
+								{#if mounted && unreadCount > 0}<span class="nav-badge">{unreadCount}</span>{/if}
+							</a>
+							<a href="/pulse" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/pulse')} onclick={closeAllPopovers}>{m.nav_community_pulse()}</a>
+							<div class="menu-divider menu-item-mobile"></div>
 							<button type="button" class="menu-item menu-item-mobile" onclick={toggleSlider}>{m.panel_complexity_title()}</button>
 							<button type="button" class="menu-item menu-item-mobile" onclick={toggleBudget}>{m.panel_budget_title()}</button>
 							<button type="button" class="menu-item menu-item-mobile" onclick={toggleTheme}>{m.panel_theme_title()}</button>
+							<div class="menu-divider menu-item-mobile"></div>
 							<a href="/about" class="menu-item" class:active={isActive('/about')} onclick={closeAllPopovers}>{m.nav_about()}</a>
 							<a href="/settings" class="menu-item" class:active={isActive('/settings')} onclick={closeAllPopovers}>{m.nav_settings()}</a>
 						</div>
@@ -353,18 +364,6 @@
 	<main class="main">
 		{@render children()}
 	</main>
-
-	<!-- Mobile-only bottom tab bar (primary nav) -->
-	<nav class="bottomnav" aria-label="Primary">
-		<a href="/" class="bottomnav-item" class:active={isActive('/')}>{m.nav_short_trending()}</a>
-		<a href="/top" class="bottomnav-item" class:active={isActive('/top')}>{m.nav_short_top()}</a>
-		<a href="/my" class="bottomnav-item" class:active={isActive('/my')}>{m.nav_short_my()}</a>
-		<a href="/my/updates" class="bottomnav-item bottomnav-updates" class:active={isActive('/my/updates')}>
-			{m.nav_short_updates()}
-			{#if mounted && unreadCount > 0}<span class="nav-badge">{unreadCount}</span>{/if}
-		</a>
-		<a href="/pulse" class="bottomnav-item" class:active={isActive('/pulse')}>{m.nav_short_pulse()}</a>
-	</nav>
 </div>
 {/if}
 
@@ -748,8 +747,18 @@
 	/* Mobile-only overflow-menu entries (hidden on desktop) */
 	.menu-item-mobile { display: none; }
 
-	/* ---- Bottom tab bar (mobile only) ---- */
-	.bottomnav { display: none; }
+	/* Nav entry inside the mobile menu: badge sits inline */
+	.menu-nav {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.menu-divider {
+		height: 1px;
+		background: var(--color-border);
+		margin: 0.3rem 0;
+	}
 
 	/* ---- Budget list (inside popover) ---- */
 	.budget-list {
@@ -862,7 +871,7 @@
 		.action-new-label { display: none; }
 		.action-new { width: 2.1rem; padding: 0; }
 		.actions { margin-left: auto; }
-		.main { padding: 1.5rem 1rem calc(4rem + env(safe-area-inset-bottom, 0px)); }
+		.main { padding: 1.5rem 1rem 3rem; }
 		/* Kill backdrop-filter when a popover is open so position:fixed
 		   escapes to viewport (backdrop-filter creates a containing block). */
 		.topbar.popover-active {
@@ -882,38 +891,6 @@
 			overflow-y: auto;
 			-webkit-overflow-scrolling: touch;
 			padding-bottom: env(safe-area-inset-bottom, 0);
-		}
-
-		/* Fixed bottom tab bar for primary navigation. */
-		.bottomnav {
-			display: flex;
-			position: fixed;
-			bottom: 0;
-			left: 0;
-			right: 0;
-			z-index: 90;
-			background: var(--color-surface);
-			border-top: 1px solid var(--color-border);
-			padding-bottom: env(safe-area-inset-bottom, 0);
-		}
-		.bottomnav-item {
-			flex: 1;
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			gap: 0.3rem;
-			padding: 0.7rem 0.25rem;
-			font-size: var(--text-xs);
-			font-weight: 500;
-			color: var(--color-text-muted);
-			text-decoration: none;
-			text-align: center;
-			white-space: nowrap;
-			transition: color var(--transition-fast);
-		}
-		.bottomnav-item.active {
-			color: var(--color-primary);
-			font-weight: 600;
 		}
 	}
 </style>

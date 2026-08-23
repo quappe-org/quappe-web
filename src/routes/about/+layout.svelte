@@ -44,19 +44,25 @@
 		align-items: start;
 	}
 
-	@media (max-width: 900px) {
-		.about-shell {
-			grid-template-columns: 1fr;
-			gap: 1.5rem;
-		}
-	}
-
 	.about-side {
 		position: sticky;
 		top: 1.5rem;
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+	}
+
+	@media (max-width: 900px) {
+		.about-shell {
+			grid-template-columns: 1fr;
+			gap: 1.5rem;
+		}
+		/* On mobile the nav stacks above the content as a normal block —
+		   sticky would float it over the article text. */
+		.about-side {
+			position: static;
+			top: auto;
+		}
 	}
 
 	.about-nav {
