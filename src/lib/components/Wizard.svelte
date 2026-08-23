@@ -2,12 +2,14 @@
 	import { onboardingStore } from '$lib/stores/onboarding.svelte';
 	import { complexityStore } from '$lib/stores/complexity.svelte';
 	import { themeStore, type Theme } from '$lib/stores/theme.svelte';
+	import { categoriesStore } from '$lib/stores/categories.svelte';
+	import { interestsStore } from '$lib/stores/interests.svelte';
 	import { getLocale, setLocale, locales, type Locale } from '$lib/paraglide/runtime';
 	import { COMPLEXITY_MIN, COMPLEXITY_DEFAULTS, COMPLEXITY_MAX } from '$lib/models/types';
 	import { m } from '$lib/paraglide/messages';
 
 	let step = $state(0);
-	const lastStep = 3;
+	const lastStep = 4;
 
 	const localeLabels: Record<Locale, string> = {
 		en: 'English',
@@ -56,9 +58,11 @@
 		if (step > 0) step -= 1;
 	}
 	function finish() {
+		interestsStore.markChosen();
 		onboardingStore.complete();
 	}
 	function skip() {
+		interestsStore.markChosen();
 		onboardingStore.complete();
 	}
 </script>
@@ -113,6 +117,21 @@
 				</div>
 				<p class="wizard-hint">{m.wizard_theme_a11y_hint()}</p>
 			</div>
+		{:else if step === 3}
+			<div class="wizard-step">
+				<h2 class="wizard-title">{m.wizard_interests_title()}</h2>
+				<p class="wizard-lead">{m.wizard_interests_lead()}</p>
+				<div class="wizard-choices wizard-interests">
+					{#each categoriesStore.list as cat}
+						<button
+							class="wizard-choice"
+							class:active={interestsStore.categories.includes(cat)}
+							onclick={() => interestsStore.toggleCategory(cat)}
+						>{cat}</button>
+					{/each}
+				</div>
+				<p class="wizard-hint">{m.wizard_interests_hint()}</p>
+			</div>
 		{:else}
 			<div class="wizard-step">
 				<h2 class="wizard-title">{m.wizard_how_title()}</h2>
@@ -126,7 +145,7 @@
 
 		<div class="wizard-nav">
 			<div class="wizard-dots">
-				{#each [0, 1, 2, 3] as i}
+				{#each [0, 1, 2, 3, 4] as i}
 					<span class="wizard-dot" class:on={i === step}></span>
 				{/each}
 			</div>

@@ -6,6 +6,7 @@
 	import { budgetStore } from '$lib/stores/budget.svelte';
 	import { uiIntents } from '$lib/stores/ui.svelte';
 	import { getUserId } from '$lib/stores/user';
+	import { interestsStore } from '$lib/stores/interests.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
 	import type { ActivityDay } from '$lib/models/contract';
 	import { m } from '$lib/paraglide/messages';
@@ -181,6 +182,14 @@
 			.slice(0, 30)
 	);
 
+	// Does a thesis match the user's followed interests (category or hashtag)?
+	function matchesInterests(t: Thesis): boolean {
+		if (!interestsStore.hasInterests) return false;
+		for (const c of t.categories) if (interestsStore.categories.includes(c)) return true;
+		for (const h of t.hashtags ?? []) if (interestsStore.hashtags.includes(h)) return true;
+		return false;
+	}
+
 	let visibleTheses = $derived.by(() => {
 		let filtered = allTheses;
 		if (selectedFilter) filtered = filtered.filter((t) => t.categories.includes(selectedFilter!));
@@ -188,6 +197,17 @@
 		// Hide only theses the user had ALREADY voted on at load — voting now
 		// keeps the thesis visible until the next reload (no mid-click vanish).
 		filtered = filtered.filter((t) => !alreadyVoted.has(t.id));
+
+		// Personalized feed: when no explicit filter is active and the user has
+		// picked interests, surface matching theses first (stable sort keeps the
+		// server's trending order within each group). Not a filter bubble — you
+		// still see everything, just relevant-to-you first.
+		if (!selectedFilter && !selectedHashtag && interestsStore.hasInterests) {
+			const followed: Thesis[] = [];
+			const rest: Thesis[] = [];
+			for (const t of filtered) (matchesInterests(t) ? followed : rest).push(t);
+			filtered = [...followed, ...rest];
+		}
 		return filtered.slice(0, complexityStore.settings.max_theses);
 	});
 
@@ -411,6 +431,22 @@
 		<p class="masthead-sub">{m.home_masthead_sub()}</p>
 	</header>
 
+	{#if interestsStore.hasInterests}
+		<div class="interests-bar">
+			<span class="interests-label">{m.home_interests_following()}</span>
+			{#each interestsStore.categories as cat}
+				<button class="interest-chip" onclick={() => interestsStore.toggleCategory(cat)} title={m.home_interests_remove()}>
+					{cat} <span class="interest-chip-x">×</span>
+				</button>
+			{/each}
+			{#each interestsStore.hashtags as tag}
+				<button class="interest-chip" onclick={() => interestsStore.toggleHashtag(tag)} title={m.home_interests_remove()}>
+					#{tag} <span class="interest-chip-x">×</span>
+				</button>
+			{/each}
+		</div>
+	{/if}
+
 	<!-- Search -->
 	<div class="search-wrap">
 		<div class="search-box">
@@ -465,6 +501,18 @@
 			<div class="section-head">
 				<h2 class="section-title">{m.home_filter_title()}</h2>
 				{#if selectedFilter || selectedHashtag}
+					{@const isFollowed = selectedFilter ? interestsStore.categories.includes(selectedFilter) : selectedHashtag ? interestsStore.hashtags.includes(selectedHashtag) : false}
+					<button
+						class="follow-toggle"
+						class:following={isFollowed}
+						onclick={() => {
+							if (selectedFilter) interestsStore.toggleCategory(selectedFilter);
+							else if (selectedHashtag) interestsStore.toggleHashtag(selectedHashtag);
+							interestsStore.markChosen();
+						}}
+					>
+						{isFollowed ? m.home_interests_unfollow() : m.home_interests_follow()}
+					</button>
 					<button class="clear-filter" onclick={() => { selectedFilter = null; selectedHashtag = null; }}>
 						&times; {m.home_filter_clear()}
 					</button>
@@ -673,6 +721,66 @@
 		flex-direction: column;
 		gap: 0.4rem;
 		padding-bottom: 0.5rem;
+	}
+
+	/* Followed-interests bar */
+	.interests-bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.interests-label {
+		font-size: var(--text-xs);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-text-light);
+	}
+
+	.interest-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.2rem 0.6rem;
+		font-size: var(--text-xs);
+		font-family: inherit;
+		background: var(--color-primary-bg);
+		color: var(--color-primary);
+		border: 1px solid var(--color-primary);
+		border-radius: 999px;
+		cursor: pointer;
+	}
+
+	.interest-chip-x {
+		font-weight: 700;
+		opacity: 0.7;
+	}
+
+	.interest-chip:hover .interest-chip-x {
+		opacity: 1;
+	}
+
+	.follow-toggle {
+		font-size: var(--text-xs);
+		font-family: inherit;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		border: 1px solid var(--color-primary);
+		background: var(--color-surface);
+		color: var(--color-primary);
+		cursor: pointer;
+		transition: background var(--transition-fast);
+	}
+
+	.follow-toggle:hover {
+		background: var(--color-primary-bg);
+	}
+
+	.follow-toggle.following {
+		background: var(--color-primary);
+		color: white;
 	}
 
 	.masthead-title {
