@@ -447,6 +447,21 @@ textarea {
 	min-height: 5rem;
 }
 
+/* iOS Safari zooms into any focused input whose font-size is < 16px and never
+   zooms back out — jarring on mobile. Force ≥16px for all text entry on small
+   screens (overrides any component that set a smaller size). */
+@media (max-width: 768px) {
+	input[type='text'],
+	input[type='url'],
+	input[type='number'],
+	input[type='email'],
+	input[type='search'],
+	textarea,
+	select {
+		font-size: 16px;
+	}
+}
+
 label {
 	display: block;
 	font-size: var(--text-sm);

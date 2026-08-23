@@ -265,11 +265,11 @@
 		const mySeq = ++similarSeq;
 		similarTimer = setTimeout(async () => {
 			try {
-				const res = await fetch(`/api/search?q=${encodeURIComponent(combined)}`);
+				const res = await fetch(`/api/theses/similar?q=${encodeURIComponent(combined)}`);
 				if (!res.ok) return;
 				const payload = await res.json();
 				if (mySeq !== similarSeq) return;
-				similarExisting = (payload.results ?? []).slice(0, 5);
+				similarExisting = (payload.results ?? []).slice(0, 3);
 			} finally {
 				if (mySeq === similarSeq) similarLoading = false;
 			}
