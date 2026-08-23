@@ -47,6 +47,33 @@
 		loadAdminData();
 	}
 
+	// ---- Data reset (destructive) ----
+	let resetting = $state(false);
+	let resetDone = $state(false);
+	async function resetData() {
+		if (resetting) return;
+		if (!confirm('Wipe ALL theses, arguments and votes on this instance? This cannot be undone.')) return;
+		if (!confirm('Really? Everything will be deleted.')) return;
+		resetting = true;
+		try {
+			const res = await fetch('/api/admin/reset', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'x-confirm-reset': 'yes', ...adminSecret.headers() },
+				body: JSON.stringify({ keep_settings: true })
+			});
+			if (res.status === 403) {
+				authError = true;
+				return;
+			}
+			if (res.ok) {
+				resetDone = true;
+				setTimeout(() => { resetDone = false; }, 3000);
+			}
+		} finally {
+			resetting = false;
+		}
+	}
+
 	async function saveBanner() {
 		const res = await fetch('/api/admin/banner', {
 			method: 'PUT',
@@ -198,6 +225,22 @@
 		</div>
 		<a href="/admin/logs" class="admin-link">Open log viewer</a>
 	</div>
+
+	<div class="card stack danger-card">
+		<div class="setting-group">
+			<h3 class="setting-label danger-label">Reset all data</h3>
+			<p class="setting-hint">
+				Wipes every thesis, argument and vote on this instance. Settings and the
+				banner are kept. For per-iteration business use — cannot be undone.
+			</p>
+		</div>
+		<div class="danger-actions">
+			<button class="btn btn-danger" onclick={resetData} disabled={resetting}>
+				{resetting ? 'Resetting…' : 'Reset all data'}
+			</button>
+			{#if resetDone}<span class="saved-hint">Done — data wiped.</span>{/if}
+		</div>
+	</div>
 </section>
 
 <style>
@@ -321,6 +364,35 @@
 		font-size: var(--text-sm);
 		color: var(--color-support);
 		font-weight: 500;
+	}
+
+	.danger-card {
+		border-color: var(--color-reject);
+	}
+
+	.danger-label {
+		color: var(--color-reject);
+	}
+
+	.danger-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.btn-danger {
+		background: var(--color-reject);
+		border-color: var(--color-reject);
+		color: #fff;
+	}
+
+	.btn-danger:hover:not(:disabled) {
+		filter: brightness(0.92);
+	}
+
+	.btn-danger:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	.categories-list {
