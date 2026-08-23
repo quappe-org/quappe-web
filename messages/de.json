@@ -1,6 +1,11 @@
 {
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"paraglide_smoke_test": "Quappe spricht Deutsch.",
+	"login_title": "Anmelden",
+	"login_lead": "Diese Instanz ist privat. Gib das Zugangs-Geheimnis ein, um fortzufahren.",
+	"login_placeholder": "Zugangs-Geheimnis",
+	"login_submit": "Eintreten",
+	"login_submitting": "Prüfe…",
 	"nav_trending": "Aktuell",
 	"nav_top": "Top",
 	"nav_my_theses": "Meine Thesen",

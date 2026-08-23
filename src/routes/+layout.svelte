@@ -16,6 +16,8 @@
 	import Wizard from '$lib/components/Wizard.svelte';
 	import { onboardingStore } from '$lib/stores/onboarding.svelte';
 	import { bannerStore } from '$lib/stores/banner.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import LoginGate from '$lib/components/LoginGate.svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -128,6 +130,7 @@
 		a11yStore.init();
 		localeStore.refresh();
 		bannerStore.load();
+		authStore.refresh();
 		bootstrapUserId().then(() => {
 			ensureBudgetLoaded();
 			updatesStore.refresh();
@@ -183,6 +186,9 @@
 
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape') closeAllPopovers(); }} />
 
+{#if mounted && authStore.loaded && authStore.needsLogin}
+	<LoginGate />
+{:else}
 <div class="app">
 	<!-- ROW 0: top navigation bar -->
 	<header class="topbar" class:popover-active={menuOpen || budgetOpen || sliderOpen || themeOpen}>
@@ -360,6 +366,7 @@
 		<a href="/pulse" class="bottomnav-item" class:active={isActive('/pulse')}>{m.nav_short_pulse()}</a>
 	</nav>
 </div>
+{/if}
 
 {#if mounted && onboardingStore.open}
 	<Wizard />
