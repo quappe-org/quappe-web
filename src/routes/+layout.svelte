@@ -199,13 +199,12 @@
 			</a>
 
 			<nav class="topnav" aria-label="Primary">
-				<a href="/" class="topnav-item" class:active={isActive('/')}>{m.nav_trending()}</a>
-				<a href="/top" class="topnav-item" class:active={isActive('/top')}>{m.nav_top()}</a>
-				<a href="/my" class="topnav-item" class:active={isActive('/my')}>{m.nav_my_theses()}</a>
-				<a href="/my/updates" class="topnav-item topnav-updates" class:active={isActive('/my/updates')}>
-					{m.nav_updates()}
+				<a href="/" class="topnav-item topnav-updates" class:active={isActive('/')}>
+					{m.nav_trending()}
 					{#if mounted && unreadCount > 0}<span class="nav-badge">{unreadCount}</span>{/if}
 				</a>
+				<a href="/top" class="topnav-item" class:active={isActive('/top')}>{m.nav_top()}</a>
+				<a href="/my" class="topnav-item" class:active={isActive('/my')}>{m.nav_my_theses()}</a>
 				<a href="/pulse" class="topnav-item" class:active={isActive('/pulse')}>{m.nav_community_pulse()}</a>
 			</nav>
 
@@ -330,13 +329,12 @@
 					{#if menuOpen}
 						<div class="popover pop-menu">
 							<!-- Primary navigation (mobile only — desktop has the top nav) -->
-							<a href="/" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/')} onclick={closeAllPopovers}>{m.nav_trending()}</a>
-							<a href="/top" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/top')} onclick={closeAllPopovers}>{m.nav_top()}</a>
-							<a href="/my" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/my')} onclick={closeAllPopovers}>{m.nav_my_theses()}</a>
-							<a href="/my/updates" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/my/updates')} onclick={closeAllPopovers}>
-								{m.nav_updates()}
+							<a href="/" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/')} onclick={closeAllPopovers}>
+								{m.nav_trending()}
 								{#if mounted && unreadCount > 0}<span class="nav-badge">{unreadCount}</span>{/if}
 							</a>
+							<a href="/top" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/top')} onclick={closeAllPopovers}>{m.nav_top()}</a>
+							<a href="/my" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/my')} onclick={closeAllPopovers}>{m.nav_my_theses()}</a>
 							<a href="/pulse" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/pulse')} onclick={closeAllPopovers}>{m.nav_community_pulse()}</a>
 							<div class="menu-divider menu-item-mobile"></div>
 							<button type="button" class="menu-item menu-item-mobile" onclick={toggleSlider}>{m.panel_complexity_title()}</button>

@@ -7,11 +7,19 @@
 	import { uiIntents } from '$lib/stores/ui.svelte';
 	import { getUserId } from '$lib/stores/user';
 	import { interestsStore } from '$lib/stores/interests.svelte';
+	import { updatesStore, type UpdateEvent } from '$lib/stores/updates.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
-	import type { ActivityDay } from '$lib/models/contract';
+	import ScrollSentinel from '$lib/components/ScrollSentinel.svelte';
+	import { onMount } from 'svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let { data } = $props();
+
+	onMount(() => {
+		// The landing page IS the feed now — pull the user's updates so they
+		// merge into the chronological stream below.
+		updatesStore.refresh();
+	});
 
 	// svelte-ignore state_referenced_locally
 	let allTheses = $state<Thesis[]>(data.theses ?? []);
@@ -42,44 +50,6 @@
 			if (t.votes.some((v) => v.user_id === userId)) set.add(t.id);
 		}
 		alreadyVoted = set;
-	});
-
-	// Re-snapshot: fold theses voted this session into the hidden set and pull
-	// fresh data. Called from the "load more / refresh" affordance.
-	let refreshing = $state(false);
-	async function refreshFeed() {
-		if (refreshing) return;
-		refreshing = true;
-		try {
-			const userId = getUserId();
-			// Fold everything currently voted into the hidden set.
-			const next = new Set(alreadyVoted);
-			for (const t of allTheses) {
-				if (t.votes.some((v) => v.user_id === userId)) next.add(t.id);
-			}
-			// Pull fresh theses from the server (same query the loader uses).
-			const res = await fetch('/api/theses?trending=true&limit=200');
-			if (res.ok) {
-				const fresh = (await res.json()) as Thesis[];
-				if (Array.isArray(fresh)) allTheses = fresh;
-			}
-			alreadyVoted = next;
-			if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
-		} finally {
-			refreshing = false;
-		}
-	}
-
-	// Count of theses voted THIS session that are still shown (candidates to
-	// clear on the next refresh) — powers the "load more" hint.
-	let sessionVotedCount = $derived.by(() => {
-		if (typeof window === 'undefined') return 0;
-		const userId = getUserId();
-		let n = 0;
-		for (const t of visibleTheses) {
-			if (t.votes.some((v) => v.user_id === userId)) n++;
-		}
-		return n;
 	});
 
 	// Listen for external "new thesis" intent (from sidebar button)
@@ -190,6 +160,146 @@
 		return false;
 	}
 
+	// ---- Merged personalized feed (default, no-filter view) ----
+	// Combines the user's updates (forks / new arguments / lifecycle) with fresh
+	// theses matching their followed interests, sorted newest-first.
+	type FeedItem =
+		| { kind: 'update'; at: string; sortKey: number; event: UpdateEvent }
+		| { kind: 'new_thesis'; at: string; sortKey: number; thesis: Thesis };
+
+	function tsOf(iso: string | undefined): number {
+		if (!iso) return 0;
+		const t = Date.parse(iso);
+		return Number.isNaN(t) ? 0 : t;
+	}
+
+	// "Recent-ish" horizon for new theses surfacing in the feed (30 days).
+	const FEED_THESIS_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+	let feedItems = $derived.by<FeedItem[]>(() => {
+		if (typeof window === 'undefined') return [];
+		const userId = getUserId();
+		const items: FeedItem[] = [];
+
+		// (a) Updates the user cares about.
+		for (const e of updatesStore.events) {
+			items.push({ kind: 'update', at: e.at, sortKey: tsOf(e.at), event: e });
+		}
+
+		// (b) New theses matching interests (or, if no interests, recent theses
+		// generally). Exclude the user's own and anything they've voted on.
+		const now = Date.now();
+		const hasInterests = interestsStore.hasInterests;
+		for (const t of allTheses) {
+			if (t.meta.author_id === userId) continue;
+			if (t.votes.some((v) => v.user_id === userId)) continue;
+			const created = tsOf(t.meta.created_at);
+			if (created > 0 && now - created > FEED_THESIS_MAX_AGE_MS) continue;
+			if (hasInterests && !matchesInterests(t)) continue;
+			items.push({ kind: 'new_thesis', at: t.meta.created_at, sortKey: created, thesis: t });
+		}
+
+		items.sort((a, b) => b.sortKey - a.sortKey);
+		return items;
+	});
+
+	// ---- Feed paging (infinite scroll) ----
+	const FEED_PAGE = 20;
+	let feedShown = $state(FEED_PAGE);
+	let feedPage = $derived(feedItems.slice(0, feedShown));
+
+	// ---- Feed time grouping (Today / This week / "Month YYYY") ----
+	interface FeedGroup {
+		key: string;
+		label: string;
+		items: FeedItem[];
+	}
+
+	function startOfDay(d: Date): number {
+		return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+	}
+
+	let feedGroups = $derived.by<FeedGroup[]>(() => {
+		const now = new Date();
+		const todayStart = startOfDay(now);
+		const weekStart = todayStart - 6 * 24 * 60 * 60 * 1000;
+		const out: FeedGroup[] = [];
+		const byKey = new Map<string, FeedGroup>();
+		for (const it of feedPage) {
+			const d = new Date(it.sortKey);
+			const t = it.sortKey;
+			let key: string;
+			let label: string;
+			if (t >= todayStart) {
+				key = 'today';
+				label = m.my_time_today();
+			} else if (t >= weekStart) {
+				key = 'week';
+				label = m.my_time_week();
+			} else {
+				key = `${d.getFullYear()}-${d.getMonth()}`;
+				label = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+			}
+			let g = byKey.get(key);
+			if (!g) {
+				g = { key, label, items: [] };
+				byKey.set(key, g);
+				out.push(g);
+			}
+			g.items.push(it);
+		}
+		return out;
+	});
+
+	// ---- Feed update-item helpers (mirrors /my/updates markup) ----
+	function updateTypeLabel(kind: UpdateEvent['kind']): string {
+		if (kind === 'fork') return m.updates_type_fork();
+		if (kind === 'new_argument') return m.updates_type_newarg();
+		return m.updates_type_lifecycle();
+	}
+
+	function fmtTime(iso: string): string {
+		if (!iso) return '';
+		try {
+			const d = new Date(iso);
+			const today = new Date();
+			const sameDay =
+				d.getFullYear() === today.getFullYear() &&
+				d.getMonth() === today.getMonth() &&
+				d.getDate() === today.getDate();
+			return sameDay
+				? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+				: d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' });
+		} catch {
+			return iso;
+		}
+	}
+
+	function markUpdateRead(e: UpdateEvent) {
+		if (!e.read) updatesStore.markRead([e.event_key]);
+	}
+
+	function keepOriginal(e: UpdateEvent) {
+		markUpdateRead(e);
+	}
+
+	async function switchToFork(e: UpdateEvent) {
+		markUpdateRead(e);
+		if (!e.fork_argument_id) return;
+		try {
+			await fetch(`/api/arguments/${e.fork_argument_id}/vote`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: 'support', weight: 1 })
+			});
+		} catch {
+			// non-fatal
+		}
+	}
+
+	// Feed is the default view; a filter switches to the plain thesis list.
+	let showFeed = $derived(!selectedFilter && !selectedHashtag && !isSearching);
+
 	let visibleTheses = $derived.by(() => {
 		let filtered = allTheses;
 		if (selectedFilter) filtered = filtered.filter((t) => t.categories.includes(selectedFilter!));
@@ -197,17 +307,6 @@
 		// Hide only theses the user had ALREADY voted on at load — voting now
 		// keeps the thesis visible until the next reload (no mid-click vanish).
 		filtered = filtered.filter((t) => !alreadyVoted.has(t.id));
-
-		// Personalized feed: when no explicit filter is active and the user has
-		// picked interests, surface matching theses first (stable sort keeps the
-		// server's trending order within each group). Not a filter bubble — you
-		// still see everything, just relevant-to-you first.
-		if (!selectedFilter && !selectedHashtag && interestsStore.hasInterests) {
-			const followed: Thesis[] = [];
-			const rest: Thesis[] = [];
-			for (const t of filtered) (matchesInterests(t) ? followed : rest).push(t);
-			filtered = [...followed, ...rest];
-		}
 		return filtered.slice(0, complexityStore.settings.max_theses);
 	});
 
@@ -656,55 +755,114 @@
 			</form>
 		{/if}
 
-		<!-- Theses list -->
-		<div class="section">
-			<div class="section-head">
-				{#if selectedFilter || selectedHashtag}
-					<span class="section-filter-active">
-						{#if selectedFilter}{selectedFilter}{/if}{#if selectedFilter && selectedHashtag} · {/if}{#if selectedHashtag}#{selectedHashtag}{/if}
-					</span>
-				{/if}
-				<span class="section-meta">
-					{m.home_list_count({ visible: visibleTheses.length, total: filteredTotal })}
-				</span>
-			</div>
+		{#if showFeed}
+			<!-- Personalized feed: merged updates + new theses, newest first -->
+			<div class="section">
+				{#if feedItems.length === 0}
+					<div class="feed-empty card">
+						<p><strong>{m.feed_empty_head()}</strong></p>
+						<p>{m.feed_empty_body()}</p>
+					</div>
+				{:else}
+					{#each feedGroups as group (group.key)}
+						<div class="time-divider">{group.label}</div>
+						<div class="feed-list">
+							{#each group.items as item (item.kind === 'update' ? `u:${item.event.event_key}` : `t:${item.thesis.id}`)}
+								{#if item.kind === 'new_thesis'}
+									<div class="feed-thesis">
+										<span class="feed-new-badge">{m.feed_new_thesis_badge()}</span>
+										<ThesisCard
+											thesis={item.thesis}
+											heatRatio={heat[item.thesis.id] ?? 0}
+											argumentCount={argumentCounts[item.thesis.id] ?? 0}
+										/>
+									</div>
+								{:else}
+									{@const e = item.event}
+									<div class="updates-item card updates-{e.kind}" class:is-read={e.read}>
+										<div class="updates-item-row">
+											<span class="updates-type updates-type-{e.kind}">{updateTypeLabel(e.kind)}</span>
+											<time class="updates-time">{fmtTime(e.at)}</time>
+											{#if e.kind === 'lifecycle' && e.lifecycle_state}
+												<span class="updates-lifecycle-state">{e.lifecycle_state}</span>
+											{/if}
+											<a class="updates-thesis" href="/thesis/{e.thesis_id}" onclick={() => markUpdateRead(e)}>{e.thesis_title}</a>
+											{#if !e.read}<span class="unread-dot" aria-label={m.updates_unread()}></span>{/if}
+										</div>
 
-			<div class="grid grid-2">
-				{#each visibleTheses as thesis (thesis.id)}
-					<ThesisCard {thesis} heatRatio={heat[thesis.id] ?? 0} argumentCount={argumentCounts[thesis.id] ?? 0} />
-				{/each}
-			</div>
+										{#if e.kind === 'new_argument'}
+											<p class="updates-content">{e.argument_content}</p>
+										{:else if e.kind === 'lifecycle'}
+											<p class="updates-content-muted">{m.updates_lifecycle_now({ state: e.lifecycle_state ?? '' })}</p>
+										{:else if e.kind === 'fork'}
+											<div class="fork-inline">
+												<div class="fork-inline-pair">
+													<div class="fork-inline-side">
+														<span class="fork-inline-label">{m.updates_fork_original()}</span>
+														<p class="fork-inline-text">{e.original_content}</p>
+														<span class="fork-inline-votes">{e.original_votes ?? 0}</span>
+													</div>
+													<div class="fork-inline-side">
+														<span class="fork-inline-label fork-inline-label-new">{m.updates_fork_variant()}</span>
+														<p class="fork-inline-text">{e.fork_content}</p>
+														<span class="fork-inline-votes">{e.fork_votes ?? 0}</span>
+													</div>
+												</div>
+												<div class="fork-inline-actions">
+													<button class="fork-inline-btn" onclick={() => keepOriginal(e)}>{m.panel_fork_updates_keep_old()}</button>
+													<button class="fork-inline-btn fork-inline-switch" onclick={() => switchToFork(e)}>{m.panel_fork_updates_switch_new()}</button>
+												</div>
+											</div>
+										{/if}
+									</div>
+								{/if}
+							{/each}
+						</div>
+					{/each}
 
-			{#if visibleTheses.length === 0}
-				<div class="feed-refresh">
-					<p class="empty-state">
-						{#if selectedFilter || selectedHashtag}
-							{m.home_list_empty_filtered({ category: selectedFilter ?? `#${selectedHashtag}` })}
-						{:else}
-							{m.home_all_voted()}
-						{/if}
-					</p>
-					{#if !selectedFilter && !selectedHashtag}
-						<button class="btn btn-primary" onclick={refreshFeed} disabled={refreshing}>
-							{refreshing ? m.home_refresh_loading() : m.home_refresh_more()}
-						</button>
+					{#if feedItems.length > feedShown}
+						<ScrollSentinel onVisible={() => (feedShown += FEED_PAGE)} />
+						<div class="feed-refresh">
+							<button class="btn btn-sm" onclick={() => (feedShown += FEED_PAGE)}>{m.my_load_more()}</button>
+						</div>
 					{/if}
+				{/if}
+			</div>
+		{:else}
+			<!-- Filtered plain thesis list -->
+			<div class="section">
+				<div class="section-head">
+					{#if selectedFilter || selectedHashtag}
+						<span class="section-filter-active">
+							{#if selectedFilter}{selectedFilter}{/if}{#if selectedFilter && selectedHashtag} · {/if}{#if selectedHashtag}#{selectedHashtag}{/if}
+						</span>
+					{/if}
+					<span class="section-meta">
+						{m.home_list_count({ visible: visibleTheses.length, total: filteredTotal })}
+					</span>
 				</div>
-			{:else if sessionVotedCount > 0}
-				<div class="feed-refresh">
-					<p class="feed-refresh-hint">{m.home_refresh_hint({ count: sessionVotedCount })}</p>
-					<button class="btn btn-sm" onclick={refreshFeed} disabled={refreshing}>
-						{refreshing ? m.home_refresh_loading() : m.home_refresh_more()}
-					</button>
-				</div>
-			{/if}
 
-			{#if filteredTotal > visibleTheses.length}
-				<p class="limit-note">
-					{m.complexity_slider_hint()}
-				</p>
-			{/if}
-		</div>
+				<div class="grid grid-2">
+					{#each visibleTheses as thesis (thesis.id)}
+						<ThesisCard {thesis} heatRatio={heat[thesis.id] ?? 0} argumentCount={argumentCounts[thesis.id] ?? 0} />
+					{/each}
+				</div>
+
+				{#if visibleTheses.length === 0}
+					<div class="feed-refresh">
+						<p class="empty-state">
+							{m.home_list_empty_filtered({ category: selectedFilter ?? `#${selectedHashtag}` })}
+						</p>
+					</div>
+				{/if}
+
+				{#if filteredTotal > visibleTheses.length}
+					<p class="limit-note">
+						{m.complexity_slider_hint()}
+					</p>
+				{/if}
+			</div>
+		{/if}
 	{/if}
 </section>
 
@@ -1143,10 +1301,239 @@
 		text-align: center;
 	}
 
-	.feed-refresh-hint {
-		margin: 0;
+	/* ---- Personalized feed ---- */
+	.feed-empty {
+		text-align: center;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		padding: 1.5rem 1rem;
+	}
+	.feed-empty p:first-child {
+		font-size: var(--text-base);
+	}
+	.feed-empty p:last-child {
 		font-size: var(--text-sm);
 		color: var(--color-text-muted);
+		margin: 0;
+	}
+
+	.time-divider {
+		font-size: var(--text-xs);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--color-text-light);
+		padding: 0.5rem 0 0.25rem;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.feed-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 0.5rem 0;
+	}
+
+	.feed-thesis {
+		position: relative;
+	}
+
+	.feed-new-badge {
+		position: absolute;
+		top: -0.5rem;
+		left: 0.75rem;
+		z-index: 1;
+		background: var(--color-primary);
+		color: white;
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		padding: 0.1rem 0.45rem;
+		border-radius: 999px;
+		box-shadow: var(--shadow-sm);
+	}
+
+	/* Update items (mirror /my/updates styling) */
+	.updates-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		position: relative;
+		padding: 0.75rem 1rem;
+		border-left: 3px solid transparent;
+		transition: opacity var(--transition-base);
+	}
+
+	.updates-item.is-read {
+		opacity: 0.6;
+	}
+
+	.updates-item.updates-fork { border-left-color: #f97316; }
+	.updates-item.updates-new_argument { border-left-color: var(--color-primary); }
+	.updates-item.updates-lifecycle { border-left-color: #8b5cf6; }
+
+	.updates-item-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+	}
+
+	.updates-type {
+		display: inline-block;
+		padding: 0.08rem 0.45rem;
+		font-size: 0.65rem;
+		font-weight: 700;
+		border-radius: var(--radius-sm);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		flex-shrink: 0;
+	}
+
+	.updates-type-fork { background: #ffedd5; color: #9a3412; }
+	.updates-type-new_argument { background: var(--color-primary-bg); color: var(--color-primary); }
+	.updates-type-lifecycle { background: #ede9fe; color: #5b21b6; }
+
+	.updates-time {
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		color: var(--color-text-light);
+		flex-shrink: 0;
+	}
+
+	.updates-thesis {
+		font-size: var(--text-sm);
+		color: var(--color-text);
+		text-decoration: none;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.updates-thesis:hover {
+		color: var(--color-primary);
+	}
+
+	.unread-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--color-primary);
+		flex-shrink: 0;
+	}
+
+	.updates-lifecycle-state {
+		display: inline-block;
+		padding: 0.05rem 0.35rem;
+		font-size: 0.65rem;
+		font-weight: 600;
+		border-radius: var(--radius-sm);
+		text-transform: capitalize;
+		background: #ede9fe;
+		color: #5b21b6;
+	}
+
+	.updates-content,
+	.updates-content-muted {
+		margin: 0;
+		font-size: var(--text-sm);
+		line-height: 1.45;
+	}
+
+	.updates-content { color: var(--color-text); }
+	.updates-content-muted { color: var(--color-text-muted); }
+
+	.fork-inline {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.fork-inline-pair {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem;
+	}
+
+	@media (max-width: 480px) {
+		.fork-inline-pair {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	.fork-inline-side {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.4rem 0.6rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg);
+	}
+
+	.fork-inline-label {
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-text-muted);
+	}
+
+	.fork-inline-label-new {
+		color: #059669;
+	}
+
+	.fork-inline-text {
+		margin: 0;
+		font-size: var(--text-xs);
+		line-height: 1.4;
+		color: var(--color-text);
+	}
+
+	.fork-inline-votes {
+		font-size: 0.65rem;
+		font-weight: 600;
+		color: var(--color-text-light);
+		font-family: var(--font-mono);
+	}
+
+	.fork-inline-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.fork-inline-btn {
+		flex: 1;
+		font-size: var(--text-xs);
+		padding: 0.35rem 0.5rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border);
+		background: var(--color-bg);
+		color: var(--color-text);
+		cursor: pointer;
+		font-family: inherit;
+		transition: background var(--transition-base), border-color var(--transition-base);
+	}
+
+	.fork-inline-btn:hover {
+		background: var(--color-border);
+	}
+
+	.fork-inline-switch {
+		background: #ecfdf5;
+		border-color: #6ee7b7;
+		color: #059669;
+		font-weight: 600;
+	}
+
+	.fork-inline-switch:hover {
+		background: #059669;
+		border-color: #059669;
+		color: white;
 	}
 
 	.limit-note {

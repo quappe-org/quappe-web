@@ -1,4 +1,5 @@
-// Session-scoped store for /my/updates events.
+// Session-scoped store for the personalized feed's update events (forks / new
+// arguments / lifecycle changes), rendered on the landing page (/).
 // Fetched from /api/reports/updates. Identity comes from the server's signed
 // cookie — no user_id in the URL. Refreshed on demand and via a 60s poll
 // started from the root layout. Read-state is persisted server-side.

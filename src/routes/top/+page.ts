@@ -4,7 +4,7 @@ import type { ActivityDay } from '$lib/models/contract';
 
 export const load: PageLoad = async ({ fetch }) => {
 	const [thesesRes, statsRes, activityRes] = await Promise.all([
-		fetch('/api/theses?top=true&limit=200'),
+		fetch('/api/theses?trending=true&limit=50'),
 		fetch('/api/stats'),
 		fetch('/api/activity')
 	]);
