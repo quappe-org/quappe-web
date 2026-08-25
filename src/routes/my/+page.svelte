@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Thesis } from '$lib/models/types';
 	import { getUserId } from '$lib/stores/user';
+	import { userIdTick } from '$lib/stores/user-tick.svelte';
 	import { activityStore } from '$lib/stores/activity.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
 	import ScrollSentinel from '$lib/components/ScrollSentinel.svelte';
@@ -30,7 +31,9 @@
 
 	let authoredEntries = $derived.by<TimelineEntry[]>(() => {
 		if (typeof window === 'undefined') return [];
+		userIdTick(); // re-run when bootstrapUserId() replaces the cached id
 		const userId = getUserId();
+		if (!userId) return [];
 		return allTheses
 			.filter((t) => t.meta.author_id === userId)
 			.map((t) => ({ thesis: t, at: t.meta.created_at }))
@@ -39,7 +42,9 @@
 
 	let votedEntries = $derived.by<TimelineEntry[]>(() => {
 		if (typeof window === 'undefined') return [];
+		userIdTick(); // re-run when bootstrapUserId() replaces the cached id
 		const userId = getUserId();
+		if (!userId) return [];
 		const out: TimelineEntry[] = [];
 		for (const t of allTheses) {
 			if (t.meta.author_id === userId) continue;
