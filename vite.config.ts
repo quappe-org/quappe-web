@@ -22,11 +22,6 @@ export default defineConfig({
 			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 			adapter: adapter()
 		})
-	],
-	ssr: {
-		external: ['better-sqlite3', '@huggingface/transformers']
-	},
-	optimizeDeps: {
-		exclude: ['better-sqlite3', '@huggingface/transformers']
-	}
+	]
 });
+
