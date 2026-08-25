@@ -157,7 +157,7 @@
 			const res = await fetch(`/api/arguments/${target.id}/vote`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ type, weight, user_id: userId })
+				body: JSON.stringify({ type, weight })
 			});
 			if (!res.ok) {
 				if (chargeable) budgetStore.refundWeight(weight);

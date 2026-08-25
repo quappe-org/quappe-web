@@ -428,7 +428,7 @@
 			const res = await fetch(`/api/theses/${suggestedForThesis.id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ categories: merged, user_id: getUserId() })
+				body: JSON.stringify({ categories: merged })
 			});
 			if (res.ok) {
 				const updated = await res.json();
@@ -495,7 +495,7 @@
 					const putRes = await fetch(`/api/theses/${responseData.id}`, {
 						method: 'PUT',
 						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ categories: suggested, user_id: getUserId() })
+						body: JSON.stringify({ categories: suggested })
 					});
 					if (putRes.ok) finalThesis = await putRes.json();
 				} catch {
