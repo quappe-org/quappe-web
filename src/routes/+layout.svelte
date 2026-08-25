@@ -356,8 +356,19 @@
 	{/if}
 
 	<!-- ROW 1+: main content, centred editorial column -->
-	{#if bannerStore.text}
-		<div class="site-banner">{bannerStore.text}</div>
+	{#if bannerStore.visible}
+		<div class="site-banner" role="status">
+			<span class="site-banner-text">{bannerStore.text}</span>
+			<button
+				type="button"
+				class="site-banner-dismiss"
+				onclick={() => bannerStore.dismiss()}
+				title="Dismiss"
+				aria-label="Dismiss banner"
+			>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+			</button>
+		</div>
 	{/if}
 	<main class="main">
 		{@render children()}
@@ -843,6 +854,10 @@
 
 	/* ---- Site banner (admin-configurable) ---- */
 	.site-banner {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
 		width: 100%;
 		padding: 0.6rem 1.5rem;
 		background: var(--color-primary-bg);
@@ -852,6 +867,29 @@
 		font-weight: 500;
 		text-align: center;
 		line-height: 1.4;
+	}
+	.site-banner-text {
+		flex: 0 1 auto;
+		min-width: 0;
+	}
+	.site-banner-dismiss {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.6rem;
+		height: 1.6rem;
+		border-radius: var(--radius-sm);
+		border: none;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+		opacity: 0.7;
+		transition: opacity var(--transition-fast), background var(--transition-fast);
+	}
+	.site-banner-dismiss:hover {
+		opacity: 1;
+		background: rgba(0, 0, 0, 0.06);
 	}
 
 	/* ---- Responsive ---- */
