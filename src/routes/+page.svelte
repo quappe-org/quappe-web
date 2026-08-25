@@ -10,6 +10,7 @@
 	import { interestsStore } from '$lib/stores/interests.svelte';
 	import { updatesStore, type UpdateGroup } from '$lib/stores/updates.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
+	import SwipeVote from '$lib/components/SwipeVote.svelte';
 	import ScrollSentinel from '$lib/components/ScrollSentinel.svelte';
 	import { onMount } from 'svelte';
 	import { m } from '$lib/paraglide/messages';
@@ -36,9 +37,9 @@
 	});
 
 	// Frozen set of theses the user had ALREADY voted on at page load. We hide
-	// only these; anything voted DURING the session stays put. The set is only
-	// refreshed on an explicit "load more" (refreshFeed), never live — so the
-	// list never rearranges under the user's hands.
+	// only these; anything voted DURING the session stays put but fades out.
+	// The set is only refreshed on an explicit "load more" (refreshFeed),
+	// never live — so the list never rearranges under the user's hands.
 	let alreadyVoted = $state<Set<string>>(new Set());
 	let snapshotTaken = false;
 	$effect(() => {
@@ -52,6 +53,27 @@
 		}
 		alreadyVoted = set;
 	});
+
+	// Theses the user has voted on IN THIS SESSION. They're shown greyed-out
+	// for a moment (feedback: "yes, I registered your vote") then removed
+	// from the feed after FADE_MS. The fade timeout lives here, not in a
+	// child component, because the parent decides when the card is gone.
+	const FADE_MS = 1600;
+	let justVotedFadingOut = $state<Set<string>>(new Set());
+	// Once the fade has elapsed we drop the id out of the feed entirely.
+	let justVotedRemoved = $state<Set<string>>(new Set());
+
+	function noteJustVoted(thesisId: string): void {
+		if (justVotedFadingOut.has(thesisId) || justVotedRemoved.has(thesisId)) return;
+		const next = new Set(justVotedFadingOut);
+		next.add(thesisId);
+		justVotedFadingOut = next;
+		setTimeout(() => {
+			const done = new Set(justVotedRemoved);
+			done.add(thesisId);
+			justVotedRemoved = done;
+		}, FADE_MS);
+	}
 
 	// Listen for external "new thesis" intent (from the top-bar button in the
 	// layout). Initialise `_lastSeenIntent` to the CURRENT counter value so a
@@ -190,17 +212,24 @@
 
 		// (a) Groups the user cares about — one per thesis, already
 		// aggregated by the server (forks / new arguments / lifecycle).
+		// Skip anything dismissed in this session.
 		for (const g of updatesStore.groups) {
+			if (updatesStore.dismissed.has(g.thesis_id)) continue;
 			items.push({ kind: 'update_group', at: g.last_at, sortKey: tsOf(g.last_at), group: g });
 		}
 
 		// (b) New theses matching interests (or, if no interests, recent theses
-		// generally). Exclude the user's own and anything they've voted on.
+		// generally). Exclude the user's own and anything they'd already voted
+		// on at page load, plus anything whose fade-out has just finished.
+		// Freshly-voted theses stay in the list — they fade via CSS opacity
+		// (see the .just-voted class on ThesisCard) and only leave the feed
+		// after FADE_MS has elapsed.
 		const now = Date.now();
 		const hasInterests = interestsStore.hasInterests;
 		for (const t of allTheses) {
 			if (userId && t.meta.author_id === userId) continue;
-			if (userId && t.votes.some((v) => v.user_id === userId)) continue;
+			if (alreadyVoted.has(t.id)) continue;
+			if (justVotedRemoved.has(t.id)) continue;
 			const created = tsOf(t.meta.created_at);
 			if (created > 0 && now - created > FEED_THESIS_MAX_AGE_MS) continue;
 			if (hasInterests && !matchesInterests(t)) continue;
@@ -260,27 +289,6 @@
 	});
 
 	// ---- Feed update-group helpers ----
-	function groupSummary(g: UpdateGroup): string {
-		const parts: string[] = [];
-		if (g.new_arguments > 0) {
-			parts.push(
-				g.new_arguments === 1
-					? m.updates_group_new_arguments_one()
-					: m.updates_group_new_arguments_many({ count: g.new_arguments })
-			);
-		}
-		if (g.forks > 0) {
-			parts.push(
-				g.forks === 1
-					? m.updates_group_forks_one()
-					: m.updates_group_forks_many({ count: g.forks })
-			);
-		}
-		if (g.lifecycle_state) {
-			parts.push(m.updates_group_lifecycle({ state: g.lifecycle_state }));
-		}
-		return parts.join(m.updates_group_separator());
-	}
 
 	function fmtTime(iso: string): string {
 		if (!iso) return '';
@@ -776,31 +784,63 @@
 						<div class="feed-list">
 							{#each group.items as item (item.kind === 'update_group' ? `g:${item.group.thesis_id}` : `t:${item.thesis.id}`)}
 								{#if item.kind === 'new_thesis'}
-									<div class="feed-thesis">
+									<div class="feed-thesis" class:just-voted={justVotedFadingOut.has(item.thesis.id)}>
 										<span class="feed-new-badge">{m.feed_new_thesis_badge()}</span>
 										<ThesisCard
 											thesis={item.thesis}
 											heatRatio={heat[item.thesis.id] ?? 0}
 											argumentCount={argumentCounts[item.thesis.id] ?? 0}
+											onvoted={() => noteJustVoted(item.thesis.id)}
 										/>
 									</div>
 								{:else}
 									{@const g = item.group}
-									<a
-										class="updates-group card"
-										class:is-read={g.read}
-										href="/thesis/{g.thesis_id}"
-										onclick={() => markGroupRead(g)}
+									<SwipeVote
+										onSwipeRight={() => markGroupRead(g)}
+										onSwipeLeft={() => updatesStore.dismissGroup(g)}
+										allowNeutral={false}
+										positiveLabel={m.updates_swipe_read()}
+										negativeLabel={m.updates_swipe_dismiss()}
+										positiveColor="var(--color-primary)"
+										negativeColor="var(--color-text-light)"
 									>
-										<div class="updates-group-row">
-											<span class="updates-group-title">{g.thesis_title}</span>
-											{#if !g.read}<span class="unread-dot" aria-label={m.updates_unread()}></span>{/if}
-										</div>
-										<div class="updates-group-meta">
-											<span class="updates-group-summary">{groupSummary(g)}</span>
-											<time class="updates-group-time">{fmtTime(g.last_at)}</time>
-										</div>
-									</a>
+										<a
+											class="updates-group card"
+											class:is-read={g.read}
+											href="/thesis/{g.thesis_id}"
+											onclick={() => markGroupRead(g)}
+										>
+											<div class="updates-group-row">
+												<span class="updates-group-title">{g.thesis_title}</span>
+												{#if !g.read}<span class="unread-dot" aria-label={m.updates_unread()}></span>{/if}
+											</div>
+											<div class="updates-group-chips">
+												{#if g.new_arguments > 0}
+													<span class="updates-chip updates-chip-new_argument" title={m.updates_type_newarg()}>
+														<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+														<span>{g.new_arguments === 1
+															? m.updates_group_new_arguments_one()
+															: m.updates_group_new_arguments_many({ count: g.new_arguments })}</span>
+													</span>
+												{/if}
+												{#if g.forks > 0}
+													<span class="updates-chip updates-chip-fork" title={m.updates_type_fork()}>
+														<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="3" r="2"></circle><circle cx="6" cy="21" r="2"></circle><circle cx="18" cy="12" r="2"></circle><path d="M18 10V8a2 2 0 0 0-2-2H8M6 5v14"></path></svg>
+														<span>{g.forks === 1
+															? m.updates_group_forks_one()
+															: m.updates_group_forks_many({ count: g.forks })}</span>
+													</span>
+												{/if}
+												{#if g.lifecycle_state}
+													<span class="updates-chip updates-chip-lifecycle" title={m.updates_type_lifecycle()}>
+														<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+														<span>{m.updates_group_lifecycle({ state: g.lifecycle_state })}</span>
+													</span>
+												{/if}
+												<time class="updates-group-time">{fmtTime(g.last_at)}</time>
+											</div>
+										</a>
+									</SwipeVote>
 								{/if}
 							{/each}
 						</div>
@@ -1323,6 +1363,15 @@
 
 	.feed-thesis {
 		position: relative;
+		transition: opacity 1.4s ease, transform 1.4s ease;
+	}
+	/* Voted just now — grey out visibly, then let the parent remove the
+	   item from the feed once the fade timer elapses. Timing matches
+	   FADE_MS in the .ts logic. */
+	.feed-thesis.just-voted {
+		opacity: 0.35;
+		transform: scale(0.98);
+		pointer-events: none;
 	}
 
 	.feed-new-badge {
@@ -1381,24 +1430,43 @@
 		color: var(--color-primary);
 	}
 
-	.updates-group-meta {
+	/* Update chips: one per event kind so the user sees at a glance whether
+	   an update means new arguments, a fork of one of their args, or a
+	   lifecycle transition. Colour + icon combined; the aggregate count is
+	   inside the chip's label. */
+	.updates-group-chips {
 		display: flex;
-		align-items: baseline;
-		gap: 0.5rem;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.4rem;
 		font-size: var(--text-xs);
-		color: var(--color-text-muted);
 	}
-	.updates-group-summary {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
+	.updates-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.2rem 0.55rem;
+		border-radius: 999px;
+		font-weight: 500;
 		white-space: nowrap;
+	}
+	.updates-chip-new_argument {
+		background: var(--color-primary-bg);
+		color: var(--color-primary);
+	}
+	.updates-chip-fork {
+		background: #ffedd5;
+		color: #9a3412;
+	}
+	.updates-chip-lifecycle {
+		background: #ede9fe;
+		color: #5b21b6;
 	}
 	.updates-group-time {
 		font-family: var(--font-mono);
 		color: var(--color-text-light);
 		flex-shrink: 0;
+		margin-left: auto;
 	}
 
 	.unread-dot {

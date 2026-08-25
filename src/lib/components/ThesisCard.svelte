@@ -14,8 +14,18 @@
 		thesis,
 		heatRatio = 0,
 		argumentCount = 0,
-		showVoteButtons = true
-	}: { thesis: Thesis; heatRatio?: number; argumentCount?: number; showVoteButtons?: boolean } = $props();
+		showVoteButtons = true,
+		onvoted
+	}: {
+		thesis: Thesis;
+		heatRatio?: number;
+		argumentCount?: number;
+		showVoteButtons?: boolean;
+		/** Fires after the server confirms a vote (or immediately after the
+		 *  optimistic update if the server call has yet to return). The feed
+		 *  uses this to start the fade-out timer. */
+		onvoted?: () => void;
+	} = $props();
 
 	let voteSummary = $derived.by<VoteSummary>(() => {
 		let support = 0, reject = 0, neutral = 0, voters = 0;
@@ -146,6 +156,10 @@
 				}
 			}
 			thesis.votes = votes;
+			// Let the feed (or wherever we're embedded) know the user just
+			// voted, so it can start the fade-out. Only fire on a cast that
+			// results in an active vote (not on retraction).
+			if (newVote) onvoted?.();
 		} finally {
 			voting = false;
 		}

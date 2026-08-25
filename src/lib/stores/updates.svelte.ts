@@ -63,6 +63,10 @@ class UpdatesStore {
 	generated_at = $state<string | null>(null);
 	unread = $state(0);
 	unreadGroups = $state(0);
+	// Session-only "hide these groups from the feed" set. Left-swipe adds to
+	// it. Not persisted: on next reload the group comes back so the user
+	// doesn't lose news accidentally.
+	dismissed = $state<Set<string>>(new Set());
 
 	async refresh(): Promise<void> {
 		if (typeof window === 'undefined') return;
@@ -118,6 +122,15 @@ class UpdatesStore {
 
 	async markGroupRead(group: UpdateGroup): Promise<void> {
 		await this.markRead(group.event_keys);
+	}
+
+	/** Session-only: hide this group from the feed until reload. Does NOT
+	 *  mark events read on the server — the user just doesn't want to see
+	 *  it right now. */
+	dismissGroup(group: UpdateGroup): void {
+		const next = new Set(this.dismissed);
+		next.add(group.thesis_id);
+		this.dismissed = next;
 	}
 
 	async markAllRead(): Promise<void> {
