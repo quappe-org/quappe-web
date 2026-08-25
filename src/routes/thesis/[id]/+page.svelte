@@ -131,8 +131,9 @@
 
 	// Frozen display order: we compute a ranking snapshot (root.id → rank) and
 	// sort by it, so live vote updates change the NUMBERS in place but do NOT
-	// make tiles jump around. Recomputed only on navigation (new `data`) or when
-	// the SET of groups changes (a new argument appears) — never on score change.
+	// make tiles jump around. Recomputed on navigation, or when the user
+	// explicitly asks to re-sort — never automatically on score change or on
+	// a new argument arriving via poll (see `pendingReorder` below).
 	let frozenRank = $state<Map<string, number>>(new Map());
 
 	function recomputeOrder() {
@@ -140,16 +141,54 @@
 		const map = new Map<string, number>();
 		ranked.forEach((g, i) => map.set(g.root.id, i));
 		frozenRank = map;
+		pendingReorderCount = 0;
 	}
 
-	// Recompute the frozen order when the set of group roots changes (navigation
-	// or a newly created argument), but not when only scores move.
-	let groupRootKey = $derived(
-		argGroups.map((g) => g.root.id).sort().join('|')
-	);
+	// Twitter/X-style pattern: when new arguments arrive or scores would
+	// meaningfully change the top order, don't yank the list out from under
+	// the user. Instead: keep the current sort and show a chip ("N new
+	// positions") the user can tap to apply.
+	let pendingReorderCount = $state(0);
+
+	function computeCurrentTopIds(count: number): string[] {
+		return [...argGroups]
+			.sort((a, b) => b.groupScore - a.groupScore)
+			.slice(0, count)
+			.map((g) => g.root.id);
+	}
+
+	// Track the set of root ids we've already ranked. If a new one appears
+	// (poll appended a fresh argument), or if the top-N by live score no
+	// longer matches the frozen order, offer to re-sort.
 	$effect(() => {
-		groupRootKey; // track membership, not scores
-		recomputeOrder();
+		if (argGroups.length === 0) {
+			if (frozenRank.size === 0) return;
+			frozenRank = new Map();
+			pendingReorderCount = 0;
+			return;
+		}
+		// First render / navigation → seed the frozen order silently.
+		if (frozenRank.size === 0) {
+			recomputeOrder();
+			return;
+		}
+		// Count new arguments (roots not yet in the frozen ranking).
+		let newArrivals = 0;
+		for (const g of argGroups) {
+			if (!frozenRank.has(g.root.id)) newArrivals++;
+		}
+		// Also detect meaningful score-driven reordering in the top slice —
+		// if the top-3 by live score isn't a permutation of the top-3 by
+		// frozen rank, offer a re-sort.
+		const N = Math.min(3, argGroups.length);
+		const frozenTop = [...frozenRank.entries()]
+			.filter(([, r]) => r < N)
+			.map(([id]) => id);
+		const liveTop = computeCurrentTopIds(N);
+		let scoreDrift = 0;
+		const frozenSet = new Set(frozenTop);
+		for (const id of liveTop) if (!frozenSet.has(id)) scoreDrift++;
+		pendingReorderCount = newArrivals + scoreDrift;
 	});
 
 	function byFrozen(a: ArgGroup, b: ArgGroup): number {
@@ -687,6 +726,19 @@
 		</SwipeVote>
 
 		<section class="arguments-section">
+			{#if pendingReorderCount > 0}
+				<button
+					type="button"
+					class="reorder-chip"
+					onclick={recomputeOrder}
+					title={m.reorder_apply_hint()}
+				>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+					<span>{pendingReorderCount === 1
+						? m.reorder_apply_one()
+						: m.reorder_apply_many({ count: pendingReorderCount })}</span>
+				</button>
+			{/if}
 			{#if showArgForm}
 				<form class="card argument-form" onsubmit={(e) => { e.preventDefault(); submitArgument(); }}>
 					<h3 class="form-title">
@@ -1127,6 +1179,33 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+	}
+
+	/* Manual re-sort trigger — appears above the argument columns whenever
+	   new arguments arrived or the live scores would meaningfully change
+	   the top order. Tapping it applies the new sort in one visible step
+	   (no yank-out-from-under). Pattern copied from X/Twitter's "N new
+	   posts" pill. */
+	.reorder-chip {
+		align-self: center;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.4rem 0.85rem;
+		border-radius: 999px;
+		border: 1px solid var(--color-primary);
+		background: var(--color-surface);
+		color: var(--color-primary);
+		font-family: inherit;
+		font-size: var(--text-sm);
+		font-weight: 500;
+		cursor: pointer;
+		box-shadow: var(--shadow-sm);
+		transition: background var(--transition-fast), color var(--transition-fast);
+	}
+	.reorder-chip:hover {
+		background: var(--color-primary);
+		color: white;
 	}
 
 	.argument-form,
