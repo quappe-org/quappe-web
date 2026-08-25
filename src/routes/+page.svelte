@@ -52,8 +52,12 @@
 		alreadyVoted = set;
 	});
 
-	// Listen for external "new thesis" intent (from sidebar button)
-	let _lastSeenIntent = $state(0);
+	// Listen for external "new thesis" intent (from the top-bar button in the
+	// layout). Initialise `_lastSeenIntent` to the CURRENT counter value so a
+	// stale click from a previous mount of this page (the counter is module-
+	// scoped and outlives navigation) doesn't re-open the form when the user
+	// returns to this tab — only new clicks after mount should trigger it.
+	let _lastSeenIntent = $state(uiIntents.openNewThesis);
 	$effect(() => {
 		const count = uiIntents.openNewThesis;
 		if (count > _lastSeenIntent) {
