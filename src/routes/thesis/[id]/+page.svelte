@@ -7,10 +7,11 @@
 	import { getUserId, markVotedArg } from '$lib/stores/user';
 	import { forkFeedStore } from '$lib/stores/fork-feed.svelte';
 	import { abbreviateNumber } from '$lib/utils/format';
-	import ArgumentCard from '$lib/components/ArgumentCard.svelte';
 	import VoteRow from '$lib/components/VoteRow.svelte';
 	import SwipeVote from '$lib/components/SwipeVote.svelte';
 	import ActivityGraph from '$lib/components/ActivityGraph.svelte';
+	import ArgumentForm from '$lib/components/ArgumentForm.svelte';
+	import ArgumentColumns from '$lib/components/ArgumentColumns.svelte';
 	import type { ActivityDay } from '$lib/models/contract';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
@@ -43,7 +44,6 @@
 		relatedMode = data.relatedMode ?? null;
 		activity = data.activity ?? [];
 		heatRatio = data.heatRatio ?? 0;
-		// Sidebar activity is now rendered inline at the bottom of the thesis page.
 		activityStore.set([], '');
 		if (data.arguments && data.thesis) {
 			forkFeedStore.update(data.arguments, data.thesis.title);
@@ -65,14 +65,11 @@
 	});
 
 	// --- Argument groups (fork families) ---
-	// Every argument belongs to a group identified by its root (the argument
-	// with no forked_from_id at the top of the chain). We render ONE tile per
-	// group; the root is the anchor and its forks are shown as variants.
 	interface ArgGroup {
 		root: Argument;
-		variants: Argument[]; // forks (descendants), excluding the root
-		all: Argument[]; // root + variants
-		groupScore: number; // combined weighted support-reject across all variants
+		variants: Argument[];
+		all: Argument[];
+		groupScore: number;
 	}
 
 	let argIndex = $derived.by(() => {
@@ -91,7 +88,6 @@
 		return root;
 	}
 
-	// Sort helper by weighted support-reject
 	function scoreOf(a: Argument): number {
 		let s = 0;
 		for (const v of a.votes) {
@@ -104,7 +100,6 @@
 
 	let argGroups = $derived.by(() => {
 		const groups = new Map<string, ArgGroup>();
-		// Seed groups by root
 		for (const a of args) {
 			const root = rootOf(a);
 			let g = groups.get(root.id);
@@ -113,27 +108,20 @@
 				groups.set(root.id, g);
 			}
 		}
-		// Fill members
 		for (const a of args) {
 			const root = rootOf(a);
 			const g = groups.get(root.id)!;
 			g.all.push(a);
 			if (a.id !== root.id) g.variants.push(a);
 		}
-		// Compute group score (sum across all variants)
 		for (const g of groups.values()) {
 			g.groupScore = g.all.reduce((s, a) => s + scoreOf(a), 0);
-			// Order variants by their own score (strongest first)
 			g.variants.sort((a, b) => scoreOf(b) - scoreOf(a));
 		}
 		return [...groups.values()];
 	});
 
-	// Frozen display order: we compute a ranking snapshot (root.id → rank) and
-	// sort by it, so live vote updates change the NUMBERS in place but do NOT
-	// make tiles jump around. Recomputed on navigation, or when the user
-	// explicitly asks to re-sort — never automatically on score change or on
-	// a new argument arriving via poll (see `pendingReorder` below).
+	// Frozen display order
 	let frozenRank = $state<Map<string, number>>(new Map());
 
 	function recomputeOrder() {
@@ -144,10 +132,6 @@
 		pendingReorderCount = 0;
 	}
 
-	// Twitter/X-style pattern: when new arguments arrive or scores would
-	// meaningfully change the top order, don't yank the list out from under
-	// the user. Instead: keep the current sort and show a chip ("N new
-	// positions") the user can tap to apply.
 	let pendingReorderCount = $state(0);
 
 	function computeCurrentTopIds(count: number): string[] {
@@ -157,9 +141,6 @@
 			.map((g) => g.root.id);
 	}
 
-	// Track the set of root ids we've already ranked. If a new one appears
-	// (poll appended a fresh argument), or if the top-N by live score no
-	// longer matches the frozen order, offer to re-sort.
 	$effect(() => {
 		if (argGroups.length === 0) {
 			if (frozenRank.size === 0) return;
@@ -167,19 +148,14 @@
 			pendingReorderCount = 0;
 			return;
 		}
-		// First render / navigation → seed the frozen order silently.
 		if (frozenRank.size === 0) {
 			recomputeOrder();
 			return;
 		}
-		// Count new arguments (roots not yet in the frozen ranking).
 		let newArrivals = 0;
 		for (const g of argGroups) {
 			if (!frozenRank.has(g.root.id)) newArrivals++;
 		}
-		// Also detect meaningful score-driven reordering in the top slice —
-		// if the top-3 by live score isn't a permutation of the top-3 by
-		// frozen rank, offer a re-sort.
 		const N = Math.min(3, argGroups.length);
 		const frozenTop = [...frozenRank.entries()]
 			.filter(([, r]) => r < N)
@@ -197,11 +173,6 @@
 		return ra - rb;
 	}
 
-	// Live vote counts without reload: poll the arguments for this thesis and
-	// merge their vote arrays in place (by id). This updates the NUMBERS while
-	// the frozen order keeps tiles from jumping. New arguments are appended and
-	// picked up by the membership-based order recompute above. We skip merging
-	// while the user is mid-vote to avoid clobbering the optimistic update.
 	async function pollVotes() {
 		if (typeof window === 'undefined' || !thesis) return;
 		if (voting) return;
@@ -211,26 +182,23 @@
 			const fresh = (await res.json()) as Argument[];
 			const byId = new Map(fresh.map((a) => [a.id, a]));
 			const userId = getUserId();
-			// Update existing args' votes in place; keep array order/identity.
 			let appended = false;
 			for (const a of args) {
 				const f = byId.get(a.id);
 				if (f) {
-					// Don't overwrite an argument the user is actively voting on locally.
 					const mineLocal = a.votes.some((v) => v.user_id === userId);
 					const mineFresh = f.votes.some((v) => v.user_id === userId);
 					if (!(mineLocal && !mineFresh)) a.votes = f.votes;
 					byId.delete(a.id);
 				}
 			}
-			// Any remaining in byId are new arguments → append.
 			for (const f of byId.values()) {
 				args.push(f);
 				appended = true;
 			}
 			if (appended) args = [...args];
 		} catch {
-			// silent — next tick tries again
+			// silent
 		}
 	}
 
@@ -240,12 +208,10 @@
 		return () => clearInterval(id);
 	});
 
-	// All argument groups, sorted by approval (frozen order), capped for display.
 	let topGroups = $derived.by(() =>
 		[...visibleArgGroups].sort(byFrozen).slice(0, complexityStore.settings.max_arguments)
 	);
 
-	// Groups below the display cap — shown under "more arguments".
 	let poolGroups = $derived.by(() => {
 		const topIds = new Set<string>(topGroups.map((g) => g.root.id));
 		return visibleArgGroups.filter((g) => !topIds.has(g.root.id)).sort(byFrozen);
@@ -254,9 +220,6 @@
 	let totalArguments = $derived(argGroups.length);
 
 	// --- Opinion view filter ---
-	// Show all arguments, or only those approved primarily by thesis-supporters
-	// / thesis-rejecters. The distribution comes from the opinion-graph endpoint:
-	// per argument, how its approvers split by their own thesis vote.
 	type OpinionView = 'all' | 'supporters' | 'rejecters';
 	let opinionView = $state<OpinionView>('all');
 
@@ -280,13 +243,10 @@
 			for (const a of data.arguments) m.set(a.argument_id, a);
 			approvals = m;
 		} catch {
-			// silent — view filter just falls back to 'all'
+			// silent
 		}
 	}
 
-	// Does any argument in a group appeal to the selected camp? An argument
-	// "belongs" to supporters/rejecters if that camp makes up the plurality of
-	// its approvers. This is emergent, not declared.
 	function groupMatchesView(g: ArgGroup): boolean {
 		if (opinionView === 'all') return true;
 		for (const a of g.all) {
@@ -317,8 +277,6 @@
 		currentWeight = existing?.weight ?? 1;
 	});
 
-	// When the server gates an argument vote on a missing thesis vote, flash a
-	// hint on the thesis tile and scroll it into view so the user positions first.
 	let needThesisVoteHint = $state(false);
 	function nudgeThesisVote() {
 		needThesisVoteHint = true;
@@ -330,15 +288,14 @@
 
 	async function castThesisVote(type: VoteType, weight: number) {
 		if (voting || !thesis) return;
-		// Base weight-1 votes are free; only extra weight draws from the pool.
 		const isRetract = currentVote === type && currentWeight === weight;
 		const chargeable = !isRetract && (type === 'support' || type === 'reject') && weight > 1;
-		if (chargeable) {			if (!budgetStore.canAffordWeight(weight)) return;
+		if (chargeable) {
+			if (!budgetStore.canAffordWeight(weight)) return;
 			budgetStore.spendWeight(weight);
 		}
 		voting = true;
 		try {
-			const userId = getUserId();
 			const res = await fetch(`/api/theses/${thesis.id}/vote`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -350,9 +307,9 @@
 			}
 			const responseData = await res.json();
 			voteSummary = responseData.vote_summary;
-			const isRetract = currentVote === type && currentWeight === weight;
-			currentVote = isRetract ? null : type;
-			currentWeight = isRetract ? 1 : weight;
+			const isRetract2 = currentVote === type && currentWeight === weight;
+			currentVote = isRetract2 ? null : type;
+			currentWeight = isRetract2 ? 1 : weight;
 			hasVotedLocally = true;
 		} finally {
 			voting = false;
@@ -360,118 +317,29 @@
 	}
 
 	// --- Argument form ---
-	type ArgFormMode = 'new' | 'fork' | 'edit';
 	let showArgForm = $state(false);
-	let argFormMode = $state<ArgFormMode>('new');
-	let argContent = $state('');
-	let argForkedFromId = $state<string | undefined>(undefined);
-	let argEditingId = $state<string | undefined>(undefined);
-	let argSubmitting = $state(false);
-	let argError = $state<string | null>(null);
+	let argFormRef = $state<ReturnType<typeof import('$lib/components/ArgumentForm.svelte')['default']> | null>(null);
 
 	function openNewArg() {
-		argFormMode = 'new';
-		argContent = '';
-		argForkedFromId = undefined;
-		argEditingId = undefined;
-		argError = null;
 		showArgForm = true;
+		argFormRef?.openNew();
 	}
 
 	function openFork(source: Argument) {
-		argFormMode = 'fork';
-		argContent = source.content;
-		argForkedFromId = source.id;
-		argEditingId = undefined;
 		showArgForm = true;
+		argFormRef?.openFork(source);
 	}
 
 	function openEdit(target: Argument) {
-		argFormMode = 'edit';
-		argContent = target.content;
-		argForkedFromId = target.forked_from_id;
-		argEditingId = target.id;
 		showArgForm = true;
+		argFormRef?.openEdit(target);
 	}
 
-	function cancelArgForm() {
-		showArgForm = false;
-		argEditingId = undefined;
-		argForkedFromId = undefined;
-		argError = null;
-	}
-
-	async function extractError(res: Response): Promise<string> {
-		if (res.status === 429) return m.error_too_many_requests();
-		if (res.status === 413) return m.error_text_too_long();
-		if (res.status === 403) {
-			const body = await res.json().catch(() => ({}));
-			return body?.error ?? m.error_not_allowed();
-		}
-		if (res.status === 400) {
-			const body = await res.json().catch(() => ({}));
-			return body?.error ?? m.error_invalid_input();
-		}
-		return m.error_server_generic({ status: res.status });
-	}
-
-	async function submitArgument() {
-		if (!argContent.trim() || !thesis) return;
-		argError = null;
-
-		if (argFormMode === 'edit' && argEditingId) {
-			argSubmitting = true;
-			try {
-				const res = await fetch(`/api/arguments/${argEditingId}`, {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						content: argContent.trim(),
-						user_id: getUserId()
-					})
-				});
-				if (!res.ok) {
-					argError = await extractError(res);
-					return;
-				}
-				const updated: Argument = await res.json();
-				args = args.map((a) => (a.id === updated.id ? updated : a));
-				cancelArgForm();
-			} finally {
-				argSubmitting = false;
-			}
-			return;
-		}
-
-		argSubmitting = true;
-		// Creating (or forking) an argument spends the daily budget.
-		if (!budgetStore.canCreateArgument()) {
-			argError = m.argcol_add_disabled_support();
-			argSubmitting = false;
-			return;
-		}
-		budgetStore.spendArgument();
-		try {
-			const res = await fetch('/api/arguments', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					thesis_id: thesis.id,
-					content: argContent.trim(),
-					forked_from_id: argForkedFromId,
-					author_id: getUserId()
-				})
-			});
-			if (!res.ok) {
-				budgetStore.refundArgument();
-				argError = await extractError(res);
-				return;
-			}
-			const newArg: Argument = await res.json();
-			args = [...args, newArg];
-			cancelArgForm();
-		} finally {
-			argSubmitting = false;
+	function onArgSubmitted(arg: Argument, mode: string) {
+		if (mode === 'edit') {
+			args = args.map((a) => (a.id === arg.id ? arg : a));
+		} else {
+			args = [...args, arg];
 		}
 	}
 
@@ -482,7 +350,7 @@
 	let editCategories = $state<Category[]>([]);
 	let editSubmitting = $state(false);
 
-	// --- Translation (session-cached) ---
+	// --- Translation ---
 	let translated = $state<{ title: string; description: string } | null>(null);
 	let translating = $state(false);
 	let translateNeeded = $derived.by(() => {
@@ -491,18 +359,12 @@
 		return thesis.lang !== localeStore.current;
 	});
 
-	// Which author-provided register to show, bound to the complexity slider.
-	// Falls back to the original when the chosen variant is absent. Title stays canonical.
 	let register = $derived<'simple' | 'prose' | 'dense'>(
 		registerForComplexity(complexityStore.settings.max_arguments)
 	);
 	let baseTitle = $derived(thesis?.title ?? '');
 	let baseDescription = $derived(pickDescription(thesis, register));
 
-	// Is the currently shown description an author-provided variant (not the
-	// original)? Drives a small "you're reading: …" indicator so the slider
-	// effect is legible instead of feeling magical. Hidden while a translation
-	// is active (translation supersedes the register text).
 	let activeVariant = $derived.by<'simple' | 'dense' | null>(() => {
 		if (!thesis || translated) return null;
 		if (register === 'simple' && thesis.description_simple) return 'simple';
@@ -510,16 +372,12 @@
 		return null;
 	});
 
-	// Display precedence: translation (of the chosen register) > register text.
 	let displayTitle = $derived(translated?.title ?? baseTitle);
 	let displayDescription = $derived(translated?.description ?? baseDescription);
 
 	async function toggleTranslate() {
 		if (!thesis) return;
-		if (translated) {
-			translated = null;
-			return;
-		}
+		if (translated) { translated = null; return; }
 		if (translating) return;
 		translating = true;
 		try {
@@ -726,106 +584,30 @@
 		</SwipeVote>
 
 		<section class="arguments-section">
-			{#if pendingReorderCount > 0}
-				<button
-					type="button"
-					class="reorder-chip"
-					onclick={recomputeOrder}
-					title={m.reorder_apply_hint()}
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-					<span>{pendingReorderCount === 1
-						? m.reorder_apply_one()
-						: m.reorder_apply_many({ count: pendingReorderCount })}</span>
-				</button>
-			{/if}
 			{#if showArgForm}
-				<form class="card argument-form" onsubmit={(e) => { e.preventDefault(); submitArgument(); }}>
-					<h3 class="form-title">
-						{#if argFormMode === 'edit'}{m.argform_title_edit()}{:else if argFormMode === 'fork'}{m.argform_title_fork()}{:else}{m.argform_title_new()}{/if}
-					</h3>
-
-					{#if argFormMode === 'fork'}
-						<p class="form-hint">{m.argform_fork_hint()}</p>
-					{/if}
-
-					<div class="form-group">
-						<label for="arg-content">{m.argform_content_label()} <span class="hint-inline">{m.argform_content_hint()}</span></label>
-						<textarea id="arg-content" bind:value={argContent} placeholder={m.argform_content_placeholder()} maxlength="800" required></textarea>
-					</div>
-
-					<div class="form-actions">
-						<button class="btn btn-primary" type="submit" disabled={argSubmitting}>
-							{#if argSubmitting}{m.argform_submitting()}{:else if argFormMode === 'edit'}{m.argform_submit_edit()}{:else if argFormMode === 'fork'}{m.argform_submit_fork()}{:else}{m.argform_submit_new()}{/if}
-						</button>
-						<button class="btn" type="button" onclick={cancelArgForm}>{m.argform_cancel()}</button>
-					</div>
-
-					{#if argError}
-						<p class="arg-error" role="alert">{argError}</p>
-					{/if}
-				</form>
+				<ArgumentForm
+					bind:this={argFormRef}
+					thesisId={thesis.id}
+					onsubmitted={onArgSubmitted}
+					oncancel={() => { showArgForm = false; }}
+					onneedthesisvote={nudgeThesisVote}
+				/>
 			{/if}
 
-			<div class="arguments-col">
-				<div class="col-header">
-					<h2 class="col-title">
-						{m.argcol_arguments()}
-						<span class="col-count">({totalArguments})</span>
-					</h2>
-					<button
-						class="btn btn-sm add-arg-btn"
-						onclick={() => openNewArg()}
-					>{m.argcol_add_arg()}</button>
-				</div>
-				<div class="opinion-view" role="group" aria-label={m.opinion_view_label()}>
-					<button class="ov-btn" class:active={opinionView === 'all'} onclick={() => opinionView = 'all'}>{m.opinion_view_all()}</button>
-					<button class="ov-btn" class:active={opinionView === 'supporters'} onclick={() => opinionView = 'supporters'}>{m.opinion_view_supporters()}</button>
-					<button class="ov-btn" class:active={opinionView === 'rejecters'} onclick={() => opinionView = 'rejecters'}>{m.opinion_view_rejecters()}</button>
-				</div>
-				<div class="arguments-list">
-					{#each topGroups as g, idx (g.root.id)}
-						<ArgumentCard
-							argument={g.root}
-							leading={idx === 0}
-							variants={g.variants}
-							onFork={openFork}
-							onEdit={openEdit}
-							onNeedThesisVote={nudgeThesisVote}
-						/>
-					{/each}
-					{#if topGroups.length === 0}
-						<p class="col-empty">{m.argcol_empty_support()}</p>
-					{/if}
-				</div>
-			</div>
-
-			<section class="argument-pool">
-				<header class="argument-pool-head">
-					<h3 class="argument-pool-title">{m.argpool_title()}</h3>
-					<p class="argument-pool-hint">{m.argpool_hint()}</p>
-				</header>
-				{#if poolGroups.length === 0}
-					<p class="argument-pool-empty">{m.argpool_empty()}</p>
-				{:else}
-					<ul class="argument-pool-list">
-						{#each poolGroups as g (g.root.id)}
-							<li class="argument-pool-item">
-							<ArgumentCard
-								argument={g.root}
-								variants={g.variants}
-								onFork={openFork}
-								onEdit={openEdit}
-								onNeedThesisVote={nudgeThesisVote}
-							/>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-				{#if argGroups.length > topGroups.length + poolGroups.length}
-					<p class="complexity-note">{m.complexity_slider_hint()}</p>
-				{/if}
-			</section>
+			<ArgumentColumns
+				{topGroups}
+				{poolGroups}
+				{totalArguments}
+				{pendingReorderCount}
+				complexityCapped={argGroups.length > topGroups.length + poolGroups.length}
+				{opinionView}
+				onreorder={recomputeOrder}
+				onopenarg={openNewArg}
+				onfork={openFork}
+				onedit={openEdit}
+				onneedthesisvote={nudgeThesisVote}
+				onopinionchange={(v) => { opinionView = v; }}
+			/>
 		</section>
 
 		{#if visibleRelated.length > 0}
@@ -918,7 +700,6 @@
 		color: var(--color-primary);
 	}
 
-	/* Thesis tile — mirrors the ThesisCard visual language */
 	.thesis-tile {
 		display: flex;
 		flex-direction: column;
@@ -931,7 +712,6 @@
 		overflow: hidden;
 	}
 
-	/* Two vertical bands on the left edge: heat (outer) and lifecycle (inner). */
 	.side-band {
 		position: absolute;
 		top: 0;
@@ -953,13 +733,11 @@
 		filter: brightness(0.85);
 	}
 
-	/* Heat band */
 	.thesis-tile.heat-hot  .heat-band { background: #ea580c; }
 	.thesis-tile.heat-warm .heat-band { background: #f59e0b; }
 	.thesis-tile.heat-cool .heat-band { background: #93c5fd; }
 	.thesis-tile.heat-cold .heat-band { background: #3b82f6; }
 
-	/* Lifecycle band */
 	.thesis-tile.lifecycle-band-seedling     .lifecycle-band-strip { background: #bef264; }
 	.thesis-tile.lifecycle-band-discussed    .lifecycle-band-strip { background: #93c5fd; }
 	.thesis-tile.lifecycle-band-contested    .lifecycle-band-strip { background: #fbbf24; }
@@ -984,7 +762,6 @@
 		padding: 0.75rem 1rem;
 	}
 
-	/* Danger zone (bottom of the page, author-only) */
 	.danger-zone {
 		border: 1px solid var(--color-reject);
 		border-radius: var(--radius-lg);
@@ -1132,7 +909,6 @@
 		flex-shrink: 0;
 	}
 
-	/* Register indicator — "you're reading: simple/dense" (slider-bound) */
 	.register-indicator {
 		display: inline-flex;
 		align-items: center;
@@ -1147,7 +923,6 @@
 		margin: 0;
 	}
 
-	/* Footer row: vote buttons + admin actions */
 	.thesis-tile-footer {
 		display: flex;
 		align-items: center;
@@ -1181,55 +956,10 @@
 		gap: 1rem;
 	}
 
-	/* Manual re-sort trigger — appears above the argument columns whenever
-	   new arguments arrived or the live scores would meaningfully change
-	   the top order. Tapping it applies the new sort in one visible step
-	   (no yank-out-from-under). Pattern copied from X/Twitter's "N new
-	   posts" pill. */
-	.reorder-chip {
-		align-self: center;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.4rem 0.85rem;
-		border-radius: 999px;
-		border: 1px solid var(--color-primary);
-		background: var(--color-surface);
-		color: var(--color-primary);
-		font-family: inherit;
-		font-size: var(--text-sm);
-		font-weight: 500;
-		cursor: pointer;
-		box-shadow: var(--shadow-sm);
-		transition: background var(--transition-fast), color var(--transition-fast);
-	}
-	.reorder-chip:hover {
-		background: var(--color-primary);
-		color: white;
-	}
-
-	.argument-form,
 	.edit-form {
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-	}
-
-	.form-title {
-		font-size: var(--text-base);
-		font-weight: 600;
-	}
-
-	.form-hint {
-		font-size: var(--text-sm);
-		color: var(--color-text-muted);
-	}
-
-	.hint-inline {
-		font-weight: 400;
-		color: var(--color-text-light);
-		font-size: var(--text-xs);
-		margin-left: 0.5rem;
 	}
 
 	.form-group {
@@ -1241,16 +971,6 @@
 	.form-actions {
 		display: flex;
 		gap: 0.5rem;
-	}
-
-	.arg-error {
-		margin: 0;
-		padding: 0.5rem 0.75rem;
-		background: var(--color-reject-bg);
-		border: 1px solid var(--color-reject);
-		border-radius: var(--radius-md);
-		color: var(--color-reject);
-		font-size: var(--text-sm);
 	}
 
 	.category-grid {
@@ -1270,110 +990,6 @@
 		border-color: var(--color-primary);
 	}
 
-	/* Single-column argument list */
-	.arguments-col {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		padding: 0.875rem;
-		border-radius: var(--radius-md);
-		border: 1px solid var(--color-border);
-	}
-
-	.col-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: baseline;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		padding-bottom: 0.375rem;
-	}
-
-	.opinion-view {
-		display: inline-flex;
-		gap: 2px;
-		background: var(--color-border);
-		border-radius: var(--radius-md);
-		overflow: hidden;
-		margin-bottom: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.ov-btn {
-		padding: 0.55rem 1.1rem;
-		font-size: var(--text-sm);
-		font-weight: 500;
-		font-family: inherit;
-		background: var(--color-surface);
-		color: var(--color-text-muted);
-		border: none;
-		cursor: pointer;
-		transition: background var(--transition-fast), color var(--transition-fast);
-	}
-
-	.ov-btn:hover {
-		color: var(--color-text);
-	}
-
-	.ov-btn.active {
-		background: var(--color-primary-bg);
-		color: var(--color-primary);
-		font-weight: 600;
-	}
-
-	.col-title {
-		display: flex;
-		align-items: baseline;
-		gap: 0.375rem;
-		font-size: var(--text-lg);
-		font-weight: 700;
-		margin: 0;
-	}
-
-	.col-count {
-		font-size: var(--text-sm);
-		font-weight: 500;
-		color: var(--color-text-muted);
-		font-family: var(--font-mono);
-	}
-
-	/* Small "add argument" button - deliberately not styled like a bold action.
-	   It's a helper, not the primary action of the column. */
-	.add-arg-btn {
-		font-size: var(--text-xs);
-		font-weight: 500;
-		padding: 0.25rem 0.625rem;
-		background: transparent;
-		border: 1px solid var(--color-border);
-		color: var(--color-text-muted);
-	}
-	.add-arg-btn:hover:not(:disabled) {
-		background: var(--color-surface);
-		color: var(--color-text);
-	}
-
-	.arguments-list {
-		position: relative;
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-
-	.arguments-list :global(.argument-card) {
-		position: relative;
-		z-index: 1;
-	}
-
-	.col-empty {
-		font-size: var(--text-sm);
-		color: var(--color-text-light);
-		text-align: center;
-		padding: 1.5rem 1rem;
-		border: 1px dashed var(--color-border);
-		border-radius: var(--radius-md);
-		background: var(--color-surface);
-	}
-
 	.not-found {
 		text-align: center;
 		padding: 4rem 1rem;
@@ -1383,67 +999,6 @@
 		gap: 1rem;
 	}
 
-	/* Argument pool (below the top columns) */
-	.argument-pool {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		padding-top: 1rem;
-		border-top: 1px dashed var(--color-border);
-	}
-
-	.argument-pool-head {
-		display: flex;
-		flex-direction: column;
-		gap: 0.15rem;
-	}
-
-	.argument-pool-title {
-		font-size: var(--text-base);
-		font-weight: 600;
-		margin: 0;
-		color: var(--color-text-muted);
-	}
-
-	.argument-pool-hint {
-		font-size: var(--text-xs);
-		color: var(--color-text-light);
-		margin: 0;
-	}
-
-	.argument-pool-empty {
-		font-size: var(--text-sm);
-		color: var(--color-text-light);
-		text-align: center;
-		padding: 1rem;
-		border: 1px dashed var(--color-border);
-		border-radius: var(--radius-md);
-		background: var(--color-surface);
-		margin: 0;
-	}
-
-	.complexity-note {
-		text-align: center;
-		font-size: var(--text-xs);
-		color: var(--color-text-light);
-		font-style: italic;
-		margin: 0.5rem 0 0;
-	}
-
-	.argument-pool-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-		gap: 0.75rem;
-	}
-
-	.argument-pool-item {
-		position: relative;
-	}
-
-	/* Related theses */
 	.related-panel {
 		background: var(--color-surface);
 		border: 1px solid var(--color-border);

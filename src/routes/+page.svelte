@@ -10,16 +10,15 @@
 	import { interestsStore } from '$lib/stores/interests.svelte';
 	import { updatesStore, type UpdateGroup } from '$lib/stores/updates.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
-	import SwipeVote from '$lib/components/SwipeVote.svelte';
-	import ScrollSentinel from '$lib/components/ScrollSentinel.svelte';
+	import SearchBox from '$lib/components/SearchBox.svelte';
+	import CreateThesisForm from '$lib/components/CreateThesisForm.svelte';
+	import FeedList from '$lib/components/FeedList.svelte';
 	import { onMount } from 'svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let { data } = $props();
 
 	onMount(() => {
-		// The landing page IS the feed now — pull the user's updates so they
-		// merge into the chronological stream below.
 		updatesStore.refresh();
 	});
 
@@ -30,7 +29,7 @@
 	// svelte-ignore state_referenced_locally
 	let argumentCounts = $state<Record<string, number>>(data.argumentCounts ?? {});
 	$effect(() => {
-		allTheses = data.theses;
+		allTheses = data.theses ?? [];
 		heat = data.heat ?? {};
 		argumentCounts = data.argumentCounts ?? {};
 		activityStore.set([], '');
@@ -60,7 +59,6 @@
 	// child component, because the parent decides when the card is gone.
 	const FADE_MS = 1600;
 	let justVotedFadingOut = $state<Set<string>>(new Set());
-	// Once the fade has elapsed we drop the id out of the feed entirely.
 	let justVotedRemoved = $state<Set<string>>(new Set());
 
 	function noteJustVoted(thesisId: string): void {
@@ -97,30 +95,6 @@
 	let searchResults = $state<Thesis[]>([]);
 	let searchMode = $state<'semantic' | 'fulltext' | 'combined' | 'empty' | null>(null);
 	let searching = $state(false);
-	let searchTimer: ReturnType<typeof setTimeout> | null = null;
-
-	function onSearchInput() {
-		if (searchTimer) clearTimeout(searchTimer);
-		const q = searchQuery.trim();
-		if (q.length < 2) {
-			searchResults = [];
-			searchMode = null;
-			return;
-		}
-		searchTimer = setTimeout(async () => {
-			searching = true;
-			try {
-				const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-				if (res.ok) {
-					const data = await res.json();
-					searchResults = data.results ?? [];
-					searchMode = data.mode ?? null;
-				}
-			} finally {
-				searching = false;
-			}
-		}, 300);
-	}
 
 	let isSearching = $derived(searchQuery.trim().length >= 2);
 
@@ -179,7 +153,6 @@
 			.slice(0, 30)
 	);
 
-	// Does a thesis match the user's followed interests (category or hashtag)?
 	function matchesInterests(t: Thesis): boolean {
 		if (!interestsStore.hasInterests) return false;
 		for (const c of t.categories) if (interestsStore.categories.includes(c)) return true;
@@ -187,10 +160,7 @@
 		return false;
 	}
 
-	// ---- Merged personalized feed (default, no-filter view) ----
-	// Combines the user's updates (aggregated per-thesis groups from
-	// /api/reports/updates) with fresh theses matching their followed
-	// interests, sorted newest-first.
+	// ---- Merged personalized feed ----
 	type FeedItem =
 		| { kind: 'update_group'; at: string; sortKey: number; group: UpdateGroup }
 		| { kind: 'new_thesis'; at: string; sortKey: number; thesis: Thesis };
@@ -201,7 +171,6 @@
 		return Number.isNaN(t) ? 0 : t;
 	}
 
-	// "Recent-ish" horizon for new theses surfacing in the feed (30 days).
 	const FEED_THESIS_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 	let feedItems = $derived.by<FeedItem[]>(() => {
@@ -210,20 +179,11 @@
 		const userId = getUserId();
 		const items: FeedItem[] = [];
 
-		// (a) Groups the user cares about — one per thesis, already
-		// aggregated by the server (forks / new arguments / lifecycle).
-		// Skip anything dismissed in this session.
 		for (const g of updatesStore.groups) {
 			if (updatesStore.dismissed.has(g.thesis_id)) continue;
 			items.push({ kind: 'update_group', at: g.last_at, sortKey: tsOf(g.last_at), group: g });
 		}
 
-		// (b) New theses matching interests (or, if no interests, recent theses
-		// generally). Exclude the user's own and anything they'd already voted
-		// on at page load, plus anything whose fade-out has just finished.
-		// Freshly-voted theses stay in the list — they fade via CSS opacity
-		// (see the .just-voted class on ThesisCard) and only leave the feed
-		// after FADE_MS has elapsed.
 		const now = Date.now();
 		const hasInterests = interestsStore.hasInterests;
 		for (const t of allTheses) {
@@ -240,12 +200,12 @@
 		return items;
 	});
 
-	// ---- Feed paging (infinite scroll) ----
+	// ---- Feed paging ----
 	const FEED_PAGE = 20;
 	let feedShown = $state(FEED_PAGE);
 	let feedPage = $derived(feedItems.slice(0, feedShown));
 
-	// ---- Feed time grouping (Today / This week / "Month YYYY") ----
+	// ---- Feed time grouping ----
 	interface FeedGroup {
 		key: string;
 		label: string;
@@ -288,39 +248,16 @@
 		return out;
 	});
 
-	// ---- Feed update-group helpers ----
-
-	function fmtTime(iso: string): string {
-		if (!iso) return '';
-		try {
-			const d = new Date(iso);
-			const today = new Date();
-			const sameDay =
-				d.getFullYear() === today.getFullYear() &&
-				d.getMonth() === today.getMonth() &&
-				d.getDate() === today.getDate();
-			return sameDay
-				? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-				: d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' });
-		} catch {
-			return iso;
-		}
-	}
-
 	function markGroupRead(g: UpdateGroup) {
 		if (!g.read) updatesStore.markGroupRead(g);
 	}
 
-
-	// Feed is the default view; a filter switches to the plain thesis list.
 	let showFeed = $derived(!selectedFilter && !selectedHashtag && !isSearching);
 
 	let visibleTheses = $derived.by(() => {
 		let filtered = allTheses;
 		if (selectedFilter) filtered = filtered.filter((t) => t.categories.includes(selectedFilter!));
 		if (selectedHashtag) filtered = filtered.filter((t) => (t.hashtags ?? []).includes(selectedHashtag!));
-		// Hide only theses the user had ALREADY voted on at load — voting now
-		// keeps the thesis visible until the next reload (no mid-click vanish).
 		filtered = filtered.filter((t) => !alreadyVoted.has(t.id));
 		return filtered.slice(0, complexityStore.settings.max_theses);
 	});
@@ -333,90 +270,12 @@
 		return filtered.length;
 	});
 
-	// ---- Thesis form ----
+	// ---- Form visibility ----
 	let showForm = $state(false);
-	let title = $state('');
-	let description = $state('');
-	let selectedCategories = $state<Category[]>([]);
+
+	// ---- Suggestion banner state ----
 	let suggestedCategories = $state<Category[]>([]);
 	let suggestedForThesis = $state<{ id: string; currentCategories: Category[] } | null>(null);
-	let submitting = $state(false);
-	let createError = $state<string | null>(null);
-
-	// Optional author-provided readability registers (prose = the fields above).
-	// Only the DESCRIPTION gets variants — the title stays canonical.
-	let showVariants = $state(false);
-	let descriptionSimple = $state('');
-	let descriptionDense = $state('');
-	let drafting = $state(false);
-
-	// LLM draft helper: fills BOTH registers from the current title/description.
-	// The author reviews/edits the result before it is saved — meaning stays theirs.
-	async function draftVariants() {
-		if (!title.trim() || !description.trim()) return;
-		drafting = true;
-		try {
-			const [simpleRes, denseRes] = await Promise.all([
-				fetch('/api/theses/draft-variant', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ title: title.trim(), description: description.trim(), variant: 'simple' })
-				}),
-				fetch('/api/theses/draft-variant', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ title: title.trim(), description: description.trim(), variant: 'dense' })
-				})
-			]);
-			if (simpleRes.ok) {
-				const d = (await simpleRes.json()) as { description: string };
-				descriptionSimple = d.description;
-			}
-			if (denseRes.ok) {
-				const d = (await denseRes.json()) as { description: string };
-				descriptionDense = d.description;
-			}
-		} finally {
-			drafting = false;
-		}
-	}
-
-	// Live "already exists?" hint while the user is typing the new thesis
-	let similarExisting = $state<Thesis[]>([]);
-	let similarLoading = $state(false);
-	let similarTimer: ReturnType<typeof setTimeout> | null = null;
-	let similarSeq = 0;
-
-	function onFormTyping() {
-		if (similarTimer) clearTimeout(similarTimer);
-		const combined = `${title.trim()} ${description.trim()}`.trim();
-		if (combined.length < 8) {
-			similarExisting = [];
-			similarLoading = false;
-			return;
-		}
-		similarLoading = true;
-		const mySeq = ++similarSeq;
-		similarTimer = setTimeout(async () => {
-			try {
-				const res = await fetch(`/api/theses/similar?q=${encodeURIComponent(combined)}`);
-				if (!res.ok) return;
-				const payload = await res.json();
-				if (mySeq !== similarSeq) return;
-				similarExisting = (payload.results ?? []).slice(0, 3);
-			} finally {
-				if (mySeq === similarSeq) similarLoading = false;
-			}
-		}, 400);
-	}
-
-	function toggleCategory(cat: Category) {
-		if (selectedCategories.includes(cat)) {
-			selectedCategories = selectedCategories.filter((c) => c !== cat);
-		} else {
-			selectedCategories = [...selectedCategories, cat];
-		}
-	}
 
 	async function applySuggested() {
 		if (!suggestedForThesis) {
@@ -440,101 +299,8 @@
 		}
 	}
 
-	async function createThesis() {
-		if (!title.trim() || !description.trim()) return;
-		if (!budgetStore.canCreateThesis()) {
-			createError = m.error_thesis_limit_reached();
-			return;
-		}
-		budgetStore.spendThesis();
-		submitting = true;
-		createError = null;
-		// Server requires ≥1 category. If the user didn't pick, fall back to
-		// 'other' up-front — the LLM suggestion (if confident) will replace it
-		// via the PUT below.
-		const payloadCategories = selectedCategories.length > 0 ? selectedCategories : ['other'];
-		try {
-			const res = await fetch('/api/theses', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					title: title.trim(),
-					description: description.trim(),
-					categories: payloadCategories,
-					description_simple: descriptionSimple.trim() || undefined,
-					description_dense: descriptionDense.trim() || undefined,
-					author_id: getUserId()
-				})
-			});
-			if (!res.ok) {
-				budgetStore.refundThesis();
-				if (res.status === 429) {
-					createError = m.error_too_many_requests();
-				} else if (res.status === 413) {
-					createError = m.error_text_too_long();
-				} else if (res.status === 400) {
-					const body = await res.json().catch(() => ({}));
-					createError = body?.error ?? m.error_invalid_input();
-				} else {
-					createError = m.error_server_generic({ status: res.status });
-				}
-				return;
-			}
-			const responseData = await res.json();
-			const suggested: Category[] = responseData.suggested_categories ?? [];
-			const currentCats = [...selectedCategories];
-
-			// If the user picked no categories, auto-apply the server's suggestion
-			// before showing the thesis in the list — this is what "just submit" expects.
-			// Skip the PUT when the suggestion is just ['other'] (no confidence) since
-			// the initial payload already defaulted to that.
-			let finalThesis: Thesis = responseData;
-			const suggestionIsFallback = suggested.length === 1 && suggested[0] === 'other';
-			if (currentCats.length === 0 && suggested.length > 0 && !suggestionIsFallback) {
-				try {
-					const putRes = await fetch(`/api/theses/${responseData.id}`, {
-						method: 'PUT',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ categories: suggested })
-					});
-					if (putRes.ok) finalThesis = await putRes.json();
-				} catch {
-					// fall through with uncategorized thesis
-				}
-			}
-
-			allTheses = [finalThesis, ...allTheses];
-
-			// Banner: only show if the suggestion adds something the user did NOT
-			// pick. If we already auto-applied above (empty selection), skip.
-			if (currentCats.length > 0) {
-				const novel = suggested.filter((c) => !currentCats.includes(c));
-				if (novel.length > 0) {
-					suggestedCategories = novel;
-					suggestedForThesis = { id: finalThesis.id, currentCategories: currentCats };
-				} else {
-					suggestedCategories = [];
-					suggestedForThesis = null;
-				}
-			} else {
-				suggestedCategories = [];
-				suggestedForThesis = null;
-			}
-
-			title = '';
-			description = '';
-			selectedCategories = [];
-			similarExisting = [];
-			descriptionSimple = '';
-			descriptionDense = '';
-			showVariants = false;
-			showForm = false;
-		} catch (err) {
-			budgetStore.refundThesis();
-			createError = m.error_server_generic({ status: 0 });
-		} finally {
-			submitting = false;
-		}
+	function onThesisCreated(thesis: Thesis) {
+		allTheses = [thesis, ...allTheses];
 	}
 </script>
 
@@ -561,23 +327,12 @@
 		</div>
 	{/if}
 
-	<!-- Search -->
-	<div class="search-wrap">
-		<div class="search-box">
-			<svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-			<input
-				type="search"
-				class="search-input"
-				placeholder={m.home_search_placeholder()}
-				bind:value={searchQuery}
-				oninput={onSearchInput}
-				maxlength="200"
-			/>
-			{#if searching}
-				<span class="search-spinner" aria-label={m.home_search_searching_aria()}></span>
-			{/if}
-		</div>
-	</div>
+	<SearchBox
+		bind:query={searchQuery}
+		bind:results={searchResults}
+		bind:mode={searchMode}
+		bind:searching
+	/>
 
 	{#if suggestedCategories.length > 0}
 		<div class="suggestion-banner">
@@ -662,197 +417,30 @@
 		</div>
 
 		{#if showForm}
-			<form class="card create-form" onsubmit={(e) => { e.preventDefault(); createThesis(); }}>
-				<div class="form-header">
-					<h2 class="form-title">{m.home_create_title()}</h2>
-					<button
-						type="button"
-						class="form-close"
-						aria-label={m.home_create_close_aria()}
-						title={m.home_create_close_aria()}
-						onclick={() => { showForm = false; similarExisting = []; createError = null; }}
-					>
-						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-					</button>
-				</div>
-
-				<div class="form-group">
-					<label for="thesis-title">{m.home_create_title_label()}</label>
-					<input id="thesis-title" type="text" bind:value={title} oninput={onFormTyping} placeholder={m.home_create_title_placeholder()} maxlength="200" required />
-				</div>
-
-				{#if similarLoading || similarExisting.length > 0}
-					<div class="similar-existing">
-						<div class="similar-head">
-							<span class="similar-label">{m.home_create_similar_label()}</span>
-							{#if similarLoading}
-								<span class="search-spinner" aria-label={m.home_search_searching_aria()}></span>
-							{/if}
-						</div>
-						{#if similarExisting.length > 0}
-							<ul class="similar-list">
-								{#each similarExisting as ex (ex.id)}
-									<li>
-										<a class="similar-link" href="/thesis/{ex.id}" target="_blank" rel="noopener">
-											<span class="similar-thesis-title">{ex.title}</span>
-											<span class="similar-cats">
-												{#each ex.categories.slice(0, 3) as cat}
-													<span class="similar-cat">{cat}</span>
-												{/each}
-											</span>
-										</a>
-									</li>
-								{/each}
-							</ul>
-						{:else if !similarLoading}
-							<p class="similar-empty">{m.home_create_similar_empty()}</p>
-						{/if}
-					</div>
-				{/if}
-
-				<div class="form-group">
-					<label for="thesis-desc">{m.home_create_desc_label()}</label>
-					<textarea id="thesis-desc" bind:value={description} oninput={onFormTyping} placeholder={m.home_create_desc_placeholder()} maxlength="2000" required></textarea>
-				</div>
-
-				<div class="form-group">
-					<label for="thesis-categories">
-						{m.home_create_categories_label()}
-						<span class="hint-inline">{m.home_create_categories_hint()}</span>
-					</label>
-					<div class="category-grid" id="thesis-categories">
-						{#each categoriesStore.list as cat}
-							<button
-								type="button"
-								class="tag category-btn"
-								class:selected={selectedCategories.includes(cat)}
-								onclick={() => toggleCategory(cat)}
-							>{cat}</button>
-						{/each}
-					</div>
-				</div>
-
-				<div class="variants-section">
-					<button type="button" class="variants-toggle" onclick={() => (showVariants = !showVariants)} aria-expanded={showVariants}>
-						<svg class="variants-chevron" class:open={showVariants} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
-						{m.home_create_variants_toggle()}
-					</button>
-					{#if showVariants}
-						<p class="variants-hint">{m.home_create_variants_hint()}</p>
-						<div class="variant-draft-row">
-							<button type="button" class="variant-draft-btn" disabled={drafting || !title.trim() || !description.trim()} onclick={draftVariants}>
-								{drafting ? m.home_create_variants_drafting() : m.home_create_variants_draft()}
-							</button>
-						</div>
-
-						<div class="variant-block">
-							<span class="variant-block-title">{m.rephrase_simple()}</span>
-							<textarea bind:value={descriptionSimple} placeholder={m.home_create_desc_placeholder()} maxlength="2000" rows="2"></textarea>
-						</div>
-
-						<div class="variant-block">
-							<span class="variant-block-title">{m.rephrase_dense()}</span>
-							<textarea bind:value={descriptionDense} placeholder={m.home_create_desc_placeholder()} maxlength="2000" rows="2"></textarea>
-						</div>
-					{/if}
-				</div>
-
-				<div class="form-actions">
-					<button class="btn btn-primary" type="submit" disabled={submitting}>
-						{submitting ? m.home_create_submitting() : m.home_create_submit()}
-					</button>
-					<button class="btn" type="button" onclick={() => { showForm = false; similarExisting = []; createError = null; }}>{m.home_create_cancel()}</button>
-				</div>
-
-				{#if createError}
-					<p class="create-error" role="alert">{createError}</p>
-				{/if}
-			</form>
+			<CreateThesisForm
+				bind:suggestedCategories
+				bind:suggestedForThesis
+				oncreated={onThesisCreated}
+				onclose={() => { showForm = false; }}
+				onapplysuggested={applySuggested}
+				ondismisssuggested={() => { suggestedCategories = []; suggestedForThesis = null; }}
+			/>
 		{/if}
 
 		{#if showFeed}
-			<!-- Personalized feed: merged updates + new theses, newest first -->
 			<div class="section">
-				{#if feedItems.length === 0}
-					<div class="feed-empty card">
-						<p><strong>{m.feed_empty_head()}</strong></p>
-						<p>{m.feed_empty_body()}</p>
-					</div>
-				{:else}
-					{#each feedGroups as group (group.key)}
-						<div class="time-divider">{group.label}</div>
-						<div class="feed-list">
-							{#each group.items as item (item.kind === 'update_group' ? `g:${item.group.thesis_id}` : `t:${item.thesis.id}`)}
-								{#if item.kind === 'new_thesis'}
-									<div class="feed-thesis" class:just-voted={justVotedFadingOut.has(item.thesis.id)}>
-										<span class="feed-new-badge">{m.feed_new_thesis_badge()}</span>
-										<ThesisCard
-											thesis={item.thesis}
-											heatRatio={heat[item.thesis.id] ?? 0}
-											argumentCount={argumentCounts[item.thesis.id] ?? 0}
-											onvoted={() => noteJustVoted(item.thesis.id)}
-										/>
-									</div>
-								{:else}
-									{@const g = item.group}
-									<SwipeVote
-										onSwipeRight={() => markGroupRead(g)}
-										onSwipeLeft={() => updatesStore.dismissGroup(g)}
-										allowNeutral={false}
-										positiveLabel={m.updates_swipe_read()}
-										negativeLabel={m.updates_swipe_dismiss()}
-										positiveColor="var(--color-primary)"
-										negativeColor="var(--color-text-light)"
-									>
-										<a
-											class="updates-group card"
-											class:is-read={g.read}
-											href="/thesis/{g.thesis_id}"
-											onclick={() => markGroupRead(g)}
-										>
-											<div class="updates-group-row">
-												<span class="updates-group-title">{g.thesis_title}</span>
-												{#if !g.read}<span class="unread-dot" aria-label={m.updates_unread()}></span>{/if}
-											</div>
-											<div class="updates-group-chips">
-												{#if g.new_arguments > 0}
-													<span class="updates-chip updates-chip-new_argument" title={m.updates_type_newarg()}>
-														<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-														<span>{g.new_arguments === 1
-															? m.updates_group_new_arguments_one()
-															: m.updates_group_new_arguments_many({ count: g.new_arguments })}</span>
-													</span>
-												{/if}
-												{#if g.forks > 0}
-													<span class="updates-chip updates-chip-fork" title={m.updates_type_fork()}>
-														<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="3" r="2"></circle><circle cx="6" cy="21" r="2"></circle><circle cx="18" cy="12" r="2"></circle><path d="M18 10V8a2 2 0 0 0-2-2H8M6 5v14"></path></svg>
-														<span>{g.forks === 1
-															? m.updates_group_forks_one()
-															: m.updates_group_forks_many({ count: g.forks })}</span>
-													</span>
-												{/if}
-												{#if g.lifecycle_state}
-													<span class="updates-chip updates-chip-lifecycle" title={m.updates_type_lifecycle()}>
-														<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-														<span>{m.updates_group_lifecycle({ state: g.lifecycle_state })}</span>
-													</span>
-												{/if}
-												<time class="updates-group-time">{fmtTime(g.last_at)}</time>
-											</div>
-										</a>
-									</SwipeVote>
-								{/if}
-							{/each}
-						</div>
-					{/each}
-
-					{#if feedItems.length > feedShown}
-						<ScrollSentinel onVisible={() => (feedShown += FEED_PAGE)} />
-						<div class="feed-refresh">
-							<button class="btn btn-sm" onclick={() => (feedShown += FEED_PAGE)}>{m.my_load_more()}</button>
-						</div>
-					{/if}
-				{/if}
+				<FeedList
+					{feedGroups}
+					{feedItems}
+					{feedShown}
+					{heat}
+					{argumentCounts}
+					{justVotedFadingOut}
+					onnote={noteJustVoted}
+					onmarkread={markGroupRead}
+					ondismiss={(g) => updatesStore.dismissGroup(g)}
+					onloadmore={() => (feedShown += FEED_PAGE)}
+				/>
 			</div>
 		{:else}
 			<!-- Filtered plain thesis list -->
@@ -899,7 +487,6 @@
 		gap: 1.5rem;
 	}
 
-	/* Editorial masthead */
 	.masthead {
 		display: flex;
 		flex-direction: column;
@@ -907,7 +494,6 @@
 		padding-bottom: 0.5rem;
 	}
 
-	/* Followed-interests bar */
 	.interests-bar {
 		display: flex;
 		flex-wrap: wrap;
@@ -1035,7 +621,6 @@
 		background: var(--color-reject-bg);
 	}
 
-	/* Category chips - horizontal scrollable, no wrapping */
 	.category-tiles {
 		display: flex;
 		gap: 0.375rem;
@@ -1094,7 +679,6 @@
 		color: var(--color-text-light);
 	}
 
-	/* Hashtag chips - second filter row below categories */
 	.hashtag-tiles {
 		display: flex;
 		gap: 0.375rem;
@@ -1145,172 +729,6 @@
 		color: rgba(14, 116, 144, 0.6);
 	}
 
-	.create-form {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.form-actions {
-		display: flex;
-		gap: 0.5rem;
-	}
-
-	/* Optional reading variants */
-	.variants-section {
-		display: flex;
-		flex-direction: column;
-		gap: 0.6rem;
-		border-top: 1px solid var(--color-border);
-		padding-top: 0.85rem;
-	}
-
-	.variants-toggle {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		background: none;
-		border: none;
-		padding: 0;
-		font-family: inherit;
-		font-size: var(--text-sm);
-		font-weight: 600;
-		color: var(--color-text-muted);
-		cursor: pointer;
-		align-self: flex-start;
-	}
-
-	.variants-toggle:hover {
-		color: var(--color-text);
-	}
-
-	.variants-chevron {
-		transition: transform var(--transition-fast);
-	}
-	.variants-chevron.open {
-		transform: rotate(90deg);
-	}
-
-	.variants-hint {
-		font-size: var(--text-xs);
-		color: var(--color-text-light);
-		line-height: 1.5;
-		margin: 0;
-	}
-
-	.variant-block {
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-		padding: 0.75rem;
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-	}
-
-	.variant-draft-row {
-		display: flex;
-		justify-content: flex-end;
-	}
-
-	.variant-block-title {
-		font-size: var(--text-xs);
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--color-text-muted);
-	}
-
-	.variant-draft-btn {
-		font-family: inherit;
-		font-size: var(--text-xs);
-		font-weight: 500;
-		padding: 0.2rem 0.6rem;
-		border-radius: var(--radius-sm);
-		background: transparent;
-		color: var(--color-primary);
-		border: 1px solid var(--color-primary);
-		cursor: pointer;
-		transition: background var(--transition-fast), color var(--transition-fast);
-	}
-
-	.variant-draft-btn:hover:not(:disabled) {
-		background: var(--color-primary);
-		color: #fff;
-	}
-
-	.variant-draft-btn:disabled {
-		opacity: 0.45;
-		cursor: default;
-	}
-
-	.create-error {
-		margin: 0;
-		padding: 0.5rem 0.75rem;
-		background: var(--color-reject-bg);
-		border: 1px solid var(--color-reject);
-		border-radius: var(--radius-md);
-		color: var(--color-reject);
-		font-size: var(--text-sm);
-	}
-
-	.form-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-	}
-
-	.form-title {
-		font-size: var(--text-lg);
-		font-weight: 600;
-		margin: 0;
-	}
-
-	.form-close {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 2rem;
-		height: 2rem;
-		padding: 0;
-		border: 1px solid transparent;
-		background: transparent;
-		color: var(--color-text-muted);
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-	}
-
-	.form-close:hover {
-		background: var(--color-reject-bg);
-		border-color: var(--color-reject);
-		color: var(--color-reject);
-	}
-
-	.form-group {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-	}
-
-	.category-grid {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.375rem;
-	}
-
-	.category-btn {
-		cursor: pointer;
-		border: 1px solid var(--color-border);
-		transition: all var(--transition-fast);
-	}
-
-	.category-btn.selected {
-		background: var(--color-primary);
-		color: white;
-		border-color: var(--color-primary);
-	}
-
 	.empty-state {
 		text-align: center;
 		color: var(--color-text-muted);
@@ -1327,217 +745,12 @@
 		text-align: center;
 	}
 
-	/* ---- Personalized feed ---- */
-	.feed-empty {
-		text-align: center;
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		padding: 1.5rem 1rem;
-	}
-	.feed-empty p:first-child {
-		font-size: var(--text-base);
-	}
-	.feed-empty p:last-child {
-		font-size: var(--text-sm);
-		color: var(--color-text-muted);
-		margin: 0;
-	}
-
-	.time-divider {
-		font-size: var(--text-xs);
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--color-text-light);
-		padding: 0.5rem 0 0.25rem;
-		border-bottom: 1px solid var(--color-border);
-	}
-
-	.feed-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		padding: 0.5rem 0;
-	}
-
-	.feed-thesis {
-		position: relative;
-		transition: opacity 1.4s ease, transform 1.4s ease;
-	}
-	/* Voted just now — grey out visibly, then let the parent remove the
-	   item from the feed once the fade timer elapses. Timing matches
-	   FADE_MS in the .ts logic. */
-	.feed-thesis.just-voted {
-		opacity: 0.35;
-		transform: scale(0.98);
-		pointer-events: none;
-	}
-
-	.feed-new-badge {
-		position: absolute;
-		top: -0.5rem;
-		left: 0.75rem;
-		z-index: 1;
-		background: var(--color-primary);
-		color: white;
-		font-size: 0.6rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		padding: 0.1rem 0.45rem;
-		border-radius: 999px;
-		box-shadow: var(--shadow-sm);
-	}
-
-	/* Update groups — one card per thesis, summary of what happened. */
-	.updates-group {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		position: relative;
-		padding: 0.75rem 1rem;
-		border-left: 3px solid var(--color-primary);
-		text-decoration: none;
-		color: inherit;
-		transition: opacity var(--transition-base), background var(--transition-base);
-	}
-	.updates-group:hover {
-		background: var(--color-bg);
-	}
-	.updates-group.is-read {
-		opacity: 0.55;
-		border-left-color: var(--color-border);
-	}
-
-	.updates-group-row {
-		display: flex;
-		align-items: center;
-		gap: 0.45rem;
-		min-width: 0;
-	}
-	.updates-group-title {
-		font-size: var(--text-sm);
-		font-weight: 500;
-		color: var(--color-text);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		flex: 1;
-		min-width: 0;
-	}
-	.updates-group:hover .updates-group-title {
-		color: var(--color-primary);
-	}
-
-	/* Update chips: one per event kind so the user sees at a glance whether
-	   an update means new arguments, a fork of one of their args, or a
-	   lifecycle transition. Colour + icon combined; the aggregate count is
-	   inside the chip's label. */
-	.updates-group-chips {
-		display: flex;
-		align-items: center;
-		flex-wrap: wrap;
-		gap: 0.4rem;
-		font-size: var(--text-xs);
-	}
-	.updates-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		padding: 0.2rem 0.55rem;
-		border-radius: 999px;
-		font-weight: 500;
-		white-space: nowrap;
-	}
-	.updates-chip-new_argument {
-		background: var(--color-primary-bg);
-		color: var(--color-primary);
-	}
-	.updates-chip-fork {
-		background: #ffedd5;
-		color: #9a3412;
-	}
-	.updates-chip-lifecycle {
-		background: #ede9fe;
-		color: #5b21b6;
-	}
-	.updates-group-time {
-		font-family: var(--font-mono);
-		color: var(--color-text-light);
-		flex-shrink: 0;
-		margin-left: auto;
-	}
-
-	.unread-dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: var(--color-primary);
-		flex-shrink: 0;
-	}
-
 	.limit-note {
 		text-align: center;
 		font-size: var(--text-xs);
 		color: var(--color-text-light);
 		padding: 0.25rem;
 		margin: 0;
-	}
-
-	/* Search */
-	.search-wrap {
-		position: relative;
-	}
-
-	.search-box {
-		display: flex;
-		align-items: center;
-		gap: 0.65rem;
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		padding: 0.85rem 1.1rem;
-		box-shadow: var(--shadow-sm);
-		transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-	}
-
-	.search-box:focus-within {
-		border-color: var(--color-primary);
-		box-shadow: 0 0 0 3px var(--color-primary-bg);
-	}
-
-	.search-icon {
-		color: var(--color-text-light);
-		flex-shrink: 0;
-	}
-
-	.search-input {
-		flex: 1;
-		border: none;
-		background: transparent;
-		font-size: var(--text-lg);
-		color: var(--color-text);
-		outline: none;
-		min-width: 0;
-	}
-
-	.search-input::placeholder {
-		color: var(--color-text-light);
-	}
-
-	.search-spinner {
-		width: 14px;
-		height: 14px;
-		border: 2px solid var(--color-border);
-		border-top-color: var(--color-primary);
-		border-radius: 50%;
-		animation: spin 0.6s linear infinite;
-		flex-shrink: 0;
-	}
-
-	@keyframes spin {
-		to { transform: rotate(360deg); }
 	}
 
 	/* Category suggestion banner */
@@ -1587,96 +800,5 @@
 
 	.suggestion-dismiss:hover {
 		color: var(--color-text);
-	}
-
-	.hint-inline {
-		font-weight: 400;
-		font-size: 0.7rem;
-		color: var(--color-text-light);
-		margin-left: 0.4rem;
-		text-transform: none;
-		letter-spacing: 0;
-	}
-
-	/* Similar-existing-thesis hint inside the create form */
-	.similar-existing {
-		background: var(--color-bg);
-		border: 1px dashed var(--color-border);
-		border-radius: var(--radius-md);
-		padding: 0.5rem 0.75rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-	}
-
-	.similar-head {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.similar-label {
-		font-size: var(--text-xs);
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--color-text-muted);
-	}
-
-	.similar-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.15rem;
-	}
-
-	.similar-link {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		padding: 0.35rem 0.4rem;
-		border-radius: var(--radius-sm);
-		text-decoration: none;
-		color: var(--color-text);
-		transition: background var(--transition-fast);
-	}
-
-	.similar-link:hover {
-		background: var(--color-surface);
-	}
-
-	.similar-thesis-title {
-		font-size: var(--text-sm);
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.similar-cats {
-		display: flex;
-		gap: 0.2rem;
-		flex-shrink: 0;
-	}
-
-	.similar-cat {
-		font-size: 0.65rem;
-		font-family: var(--font-mono);
-		color: var(--color-text-light);
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		border-radius: 9999px;
-		padding: 0.05rem 0.4rem;
-		text-transform: capitalize;
-	}
-
-	.similar-empty {
-		font-size: var(--text-xs);
-		color: var(--color-text-light);
-		margin: 0;
 	}
 </style>

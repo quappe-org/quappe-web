@@ -1,10 +1,13 @@
 <script lang="ts">
-	import type { Thesis } from '$lib/models/types';
+	import type { Thesis, VoteType } from '$lib/models/types';
 	import { getUserId } from '$lib/stores/user';
 	import { userIdTick } from '$lib/stores/user-tick.svelte';
 	import { activityStore } from '$lib/stores/activity.svelte';
+	import { budgetStore } from '$lib/stores/budget.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
+	import SwipeVote from '$lib/components/SwipeVote.svelte';
 	import ScrollSentinel from '$lib/components/ScrollSentinel.svelte';
+	import { nextFibWeight, FIB_WEIGHTS } from '$lib/models/fibonacci';
 	import { m } from '$lib/paraglide/messages';
 
 	let { data } = $props();
@@ -42,14 +45,17 @@
 
 	let votedEntries = $derived.by<TimelineEntry[]>(() => {
 		if (typeof window === 'undefined') return [];
-		userIdTick(); // re-run when bootstrapUserId() replaces the cached id
+		userIdTick();
 		const userId = getUserId();
 		if (!userId) return [];
 		const out: TimelineEntry[] = [];
 		for (const t of allTheses) {
 			if (t.meta.author_id === userId) continue;
+			// Use the frozen set so the card stays visible even after a weight-change
+			// (which rewrites thesis.votes and could otherwise drop the entry).
+			if (!frozenVotedIds.has(t.id)) continue;
 			const mine = t.votes.find((v) => v.user_id === userId);
-			if (mine) out.push({ thesis: t, at: mine.cast_at || t.meta.created_at });
+			out.push({ thesis: t, at: mine?.cast_at || t.meta.created_at });
 		}
 		return out.sort((a, b) => (a.at < b.at ? 1 : -1));
 	});
@@ -58,6 +64,66 @@
 	const PAGE = 20;
 	let authoredShown = $state(PAGE);
 	let votedShown = $state(PAGE);
+
+	// Freeze the voted-entries list at load time. On this page a vote-weight
+	// change must NOT remove the card from the list (it would disappear mid-
+	// interaction). We only refresh when data reloads (navigation).
+	let frozenVotedIds = $state<Set<string>>(new Set());
+	$effect(() => {
+		// Re-seed whenever the server data changes (navigation).
+		const userId = getUserId();
+		const ids = new Set<string>();
+		for (const t of allTheses) {
+			if (t.meta.author_id === userId) continue;
+			if (t.votes.some((v) => v.user_id === userId)) ids.add(t.id);
+		}
+		frozenVotedIds = ids;
+	});
+
+	// Per-thesis weight overrides for this session: swipe → step up Fibonacci.
+	let weightOverrides = $state<Map<string, number>>(new Map());
+
+	function getCurrentWeight(thesis: Thesis): number {
+		if (weightOverrides.has(thesis.id)) return weightOverrides.get(thesis.id)!;
+		const userId = getUserId();
+		const mine = thesis.votes.find((v) => v.user_id === userId);
+		return mine?.weight ?? 1;
+	}
+
+	function getCurrentVoteType(thesis: Thesis): VoteType | null {
+		const userId = getUserId();
+		const mine = thesis.votes.find((v) => v.user_id === userId);
+		return mine ? (mine.type as VoteType) : null;
+	}
+
+	async function handleWeightSwipe(thesis: Thesis, direction: 'right' | 'left') {
+		const userId = getUserId();
+		const mine = thesis.votes.find((v) => v.user_id === userId);
+		if (!mine) return; // no prior vote — nothing to weight up
+		const currentType = mine.type as VoteType;
+		const swipedType: VoteType = direction === 'right' ? 'support' : 'reject';
+		// Swipe must match the existing vote direction; ignore cross-direction swipes.
+		if (swipedType !== currentType) return;
+		const currentW = getCurrentWeight(thesis);
+		const nextW = nextFibWeight(currentW, FIB_WEIGHTS as number[]);
+		if (nextW <= currentW) return; // already at max — don't wrap back down
+		if (nextW > 1 && !budgetStore.canAffordWeight(nextW)) return;
+		if (nextW > 1) budgetStore.spendWeight(nextW);
+		try {
+			const res = await fetch(`/api/theses/${thesis.id}/vote`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type: currentType, weight: nextW })
+			});
+			if (!res.ok) {
+				if (nextW > 1) budgetStore.refundWeight(nextW);
+				return;
+			}
+			weightOverrides = new Map(weightOverrides).set(thesis.id, nextW);
+		} catch {
+			if (nextW > 1) budgetStore.refundWeight(nextW);
+		}
+	}
 
 	let authoredPage = $derived(authoredEntries.slice(0, authoredShown));
 	let votedPage = $derived(votedEntries.slice(0, votedShown));
@@ -209,7 +275,7 @@
 		<h2 class="section-title">{m.my_section_authored()}</h2>
 		{#each authoredGroups as group (group.key)}
 			<div class="time-divider">{group.label}</div>
-			<div class="grid grid-2">
+			<div class="thesis-stack">
 				{#each group.entries as entry (entry.thesis.id)}
 					<ThesisCard thesis={entry.thesis} heatRatio={heat[entry.thesis.id] ?? 0} argumentCount={argumentCounts[entry.thesis.id] ?? 0} showVoteButtons={false} />
 				{/each}
@@ -227,9 +293,25 @@
 		<h2 class="section-title">{m.my_section_voted()}</h2>
 		{#each votedGroups as group (group.key)}
 			<div class="time-divider">{group.label}</div>
-			<div class="grid grid-2">
+			<div class="thesis-stack">
 				{#each group.entries as entry (entry.thesis.id)}
-					<ThesisCard thesis={entry.thesis} heatRatio={heat[entry.thesis.id] ?? 0} argumentCount={argumentCounts[entry.thesis.id] ?? 0} />
+					{@const voteType = getCurrentVoteType(entry.thesis)}
+					{@const currentW = getCurrentWeight(entry.thesis)}
+					{@const nextW = nextFibWeight(currentW, FIB_WEIGHTS as number[])}
+					<div class="voted-entry">
+						<SwipeVote
+							onSwipeRight={voteType === 'support' && nextW > currentW ? () => handleWeightSwipe(entry.thesis, 'right') : undefined}
+							onSwipeLeft={voteType === 'reject' && nextW > currentW ? () => handleWeightSwipe(entry.thesis, 'left') : undefined}
+							allowNeutral={false}
+							positiveLabel={nextW > currentW ? `weight ${currentW} → ${nextW}` : `max weight (${currentW})`}
+							negativeLabel={nextW > currentW ? `weight ${currentW} → ${nextW}` : `max weight (${currentW})`}
+						>
+							<ThesisCard thesis={entry.thesis} heatRatio={heat[entry.thesis.id] ?? 0} argumentCount={argumentCounts[entry.thesis.id] ?? 0} />
+						</SwipeVote>
+						{#if currentW > 1}
+							<span class="weight-badge" title="Your vote weight">{currentW}</span>
+						{/if}
+					</div>
 				{/each}
 			</div>
 		{/each}
@@ -306,6 +388,31 @@
 		display: flex;
 		justify-content: center;
 		padding: 0.75rem 0;
+	}
+
+	.thesis-stack {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-lg, 1.25rem);
+	}
+
+	.voted-entry {
+		position: relative;
+	}
+
+	.weight-badge {
+		position: absolute;
+		top: 0.5rem;
+		right: 0.5rem;
+		z-index: 4;
+		background: var(--color-primary);
+		color: white;
+		font-size: 0.6rem;
+		font-weight: 700;
+		font-family: var(--font-mono);
+		padding: 0.1rem 0.4rem;
+		border-radius: 999px;
+		pointer-events: none;
 	}
 
 	.standpoint-panel {
