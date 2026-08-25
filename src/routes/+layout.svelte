@@ -863,8 +863,10 @@
 		.brand-name { display: none; }
 		/* Primary nav moves to the bottom tab bar on mobile. */
 		.topnav { display: none; }
-		/* Secondary popover triggers move into the overflow menu on mobile. */
-		.secondary-action { display: none; }
+		/* Hide the desktop trigger buttons but keep the wrapper visible — the
+		   overflow menu re-triggers the same popovers, and the popovers are
+		   position: fixed bottom-sheets that must still mount to be shown. */
+		.secondary-action > .action-btn { display: none; }
 		.menu-item-mobile { display: block; }
 		.action-new-label { display: none; }
 		.action-new { width: 2.1rem; padding: 0; }
