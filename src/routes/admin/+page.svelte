@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { categoriesStore } from '$lib/stores/categories.svelte';
 	import { adminSecret } from '$lib/stores/admin-secret.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let bannerText = $state('');
@@ -10,6 +11,13 @@
 	let newCategory = $state('');
 	let authError = $state(false);
 	let secretInput = $state('');
+	// Full-page gate: no admin UI is rendered until we've verified either the
+	// admin secret (via a stats probe) or a gated-mode admin role. The old
+	// "unlock box at the top" let visitors see the categories editor even when
+	// the header they had was wrong — that's the bug the user hit.
+	let authorized = $state(false);
+	let probing = $state(true);
+	let gateError = $state<string | null>(null);
 
 	interface UserStats {
 		total_users: number;
@@ -17,34 +25,62 @@
 	}
 	let stats = $state<UserStats | null>(null);
 
+	// Probe whether the current credentials (header secret or gated-mode
+	// admin role from the cookie) get us past requireAdmin. This is the sole
+	// gate: everything else on the page is behind `authorized`.
+	async function probeAuth(): Promise<boolean> {
+		const res = await fetch('/api/admin/users?days=30', { headers: adminSecret.headers() });
+		if (res.ok) {
+			stats = await res.json();
+			return true;
+		}
+		return false;
+	}
+
 	async function loadAdminData() {
 		authError = false;
 		// Banner GET is public; used to prefill the editor.
-		const res = await fetch('/api/admin/banner');
-		if (res.ok) {
-			const data = await res.json();
+		const bannerRes = await fetch('/api/admin/banner');
+		if (bannerRes.ok) {
+			const data = await bannerRes.json();
 			bannerText = data.text ?? '';
 		}
 		loading = false;
+	}
 
-		// Stats require admin — surfaces whether the secret is valid.
-		const statsRes = await fetch('/api/admin/users?days=30', { headers: adminSecret.headers() });
-		if (statsRes.status === 403) {
-			authError = true;
-			stats = null;
-			return;
+	async function initGate() {
+		probing = true;
+		// In gated mode, an admin role from the auth cookie is enough — no
+		// header needed. Otherwise we need a stored secret to try.
+		if (authStore.role === 'admin' || adminSecret.secret) {
+			authorized = await probeAuth();
+			if (authorized) await loadAdminData();
+			else adminSecret.clear(); // stale/invalid — force re-entry
 		}
-		if (statsRes.ok) {
-			stats = await statsRes.json();
+		probing = false;
+	}
+
+	onMount(initGate);
+
+	async function submitSecret() {
+		if (!secretInput.trim()) return;
+		gateError = null;
+		adminSecret.set(secretInput);
+		secretInput = '';
+		const ok = await probeAuth();
+		if (ok) {
+			authorized = true;
+			await loadAdminData();
+		} else {
+			adminSecret.clear();
+			gateError = 'Wrong secret. Try again.';
 		}
 	}
 
-	onMount(loadAdminData);
-
-	function submitSecret() {
-		adminSecret.set(secretInput);
-		secretInput = '';
-		loadAdminData();
+	function lock() {
+		adminSecret.clear();
+		authorized = false;
+		stats = null;
 	}
 
 	// ---- Data reset (destructive) ----
@@ -61,8 +97,9 @@
 				headers: { 'Content-Type': 'application/json', 'x-confirm-reset': 'yes', ...adminSecret.headers() },
 				body: JSON.stringify({ keep_settings: true })
 			});
-			if (res.status === 403) {
+			if (res.status === 403 || res.status === 401) {
 				authError = true;
+				authorized = false;
 				return;
 			}
 			if (res.ok) {
@@ -80,8 +117,9 @@
 			headers: { 'Content-Type': 'application/json', ...adminSecret.headers() },
 			body: JSON.stringify({ text: bannerText })
 		});
-		if (res.status === 403) {
+		if (res.status === 403 || res.status === 401) {
 			authError = true;
+			authorized = false;
 			return;
 		}
 		if (res.ok) {
@@ -107,6 +145,34 @@
 	}
 </script>
 
+{#if !authorized}
+	<section class="admin-gate">
+		<div class="gate-card">
+			<h1 class="gate-title">Admin</h1>
+			<p class="gate-lead">
+				Enter the operator secret to unlock this instance's admin tools.
+				Nothing else on this page is shown until you're in.
+			</p>
+			{#if probing}
+				<p class="gate-hint">Checking…</p>
+			{:else}
+				<form class="gate-form" onsubmit={(e) => { e.preventDefault(); submitSecret(); }}>
+					<!-- svelte-ignore a11y_autofocus — this is a single-purpose gate; autofocus is the expected UX -->
+					<input
+						type="password"
+						bind:value={secretInput}
+						placeholder="Admin secret"
+						class="gate-input"
+						autocomplete="current-password"
+						autofocus
+					/>
+					<button class="btn btn-primary" type="submit" disabled={!secretInput.trim()}>Unlock</button>
+				</form>
+				{#if gateError}<p class="gate-error">{gateError}</p>{/if}
+			{/if}
+		</div>
+	</section>
+{:else}
 <section class="stack-lg">
 	<h1 class="page-title">Admin</h1>
 
@@ -114,26 +180,13 @@
 		<div class="setting-group">
 			<h3 class="setting-label">Operator access</h3>
 			<p class="setting-hint">
-				Admin actions (banner, stats, logs, archiving) require the operator secret
-				(QUAPPE_ADMIN_SECRET). It's kept for this browser session only.
+				Admin actions (banner, stats, logs, archiving) are unlocked for this browser session.
 			</p>
 		</div>
-		{#if authError}
-			<p class="auth-error">Secret missing or invalid — admin actions are locked.</p>
-		{/if}
-		<form class="secret-form" onsubmit={(e) => { e.preventDefault(); submitSecret(); }}>
-			<input
-				type="password"
-				bind:value={secretInput}
-				placeholder={adminSecret.secret ? '•••••••• (set — re-enter to change)' : 'Enter admin secret'}
-				class="secret-input"
-				autocomplete="off"
-			/>
-			<button class="btn btn-primary btn-sm" type="submit" disabled={!secretInput.trim()}>Unlock</button>
-			{#if adminSecret.secret}
-				<button class="btn btn-sm" type="button" onclick={() => adminSecret.clear()}>Clear</button>
-			{/if}
-		</form>
+		<div class="secret-form">
+			<span class="unlocked-badge">Unlocked</span>
+			<button class="btn btn-sm" type="button" onclick={lock}>Lock</button>
+		</div>
 	</div>
 
 	<div class="card stack">
@@ -242,6 +295,7 @@
 		</div>
 	</div>
 </section>
+{/if}
 
 <style>
 	.page-title {
@@ -250,30 +304,80 @@
 		font-weight: 600;
 	}
 
+	/* ---- Gate (unauthorized state) ---- */
+	.admin-gate {
+		min-height: 60vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1rem;
+	}
+	.gate-card {
+		width: 100%;
+		max-width: 380px;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-xl);
+		box-shadow: var(--shadow-lg);
+		padding: 2rem 1.75rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.gate-title {
+		font-family: var(--font-serif);
+		font-size: 1.5rem;
+		font-weight: 600;
+		margin: 0;
+	}
+	.gate-lead {
+		color: var(--color-text-muted);
+		font-size: var(--text-sm);
+		line-height: 1.5;
+		margin: 0;
+	}
+	.gate-hint {
+		color: var(--color-text-muted);
+		font-size: var(--text-sm);
+		margin: 0;
+	}
+	.gate-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		margin-top: 0.4rem;
+	}
+	.gate-input {
+		width: 100%;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		font-family: inherit;
+		font-size: 16px;
+		background: var(--color-bg);
+		color: var(--color-text);
+	}
+	.gate-error {
+		margin: 0;
+		font-size: var(--text-sm);
+		color: var(--color-reject);
+		font-weight: 500;
+	}
+	.unlocked-badge {
+		display: inline-block;
+		padding: 0.15rem 0.5rem;
+		background: var(--color-support-bg, rgba(0, 128, 0, 0.1));
+		color: var(--color-support, #2c8a2c);
+		border-radius: var(--radius-sm);
+		font-size: var(--text-xs);
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
 	.secret-form {
 		display: flex;
 		gap: 0.5rem;
 		align-items: center;
 		flex-wrap: wrap;
-	}
-
-	.secret-input {
-		flex: 1;
-		min-width: 12rem;
-		padding: 0.4rem 0.6rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		font-family: inherit;
-		font-size: var(--text-sm);
-		background: var(--color-bg);
-		color: var(--color-text);
-	}
-
-	.auth-error {
-		margin: 0;
-		font-size: var(--text-sm);
-		color: var(--color-reject);
-		font-weight: 500;
 	}
 
 	.stat-total {
