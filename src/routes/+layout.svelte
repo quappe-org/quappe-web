@@ -878,6 +878,8 @@
 			backdrop-filter: none;
 			-webkit-backdrop-filter: none;
 		}
+		/* Small popovers (budget / slider / theme) stay as bottom sheets —
+		   they're short and the bottom is thumb-friendly. */
 		.popover {
 			position: fixed;
 			top: auto;
@@ -891,6 +893,50 @@
 			overflow-y: auto;
 			-webkit-overflow-scrolling: touch;
 			padding-bottom: env(safe-area-inset-bottom, 0);
+		}
+
+		/* The overflow menu becomes a right-anchored full-height drawer.
+		   Rationale: it holds the primary nav on mobile — a bottom-sheet
+		   made it feel like a transient popover and cramped the labels; a
+		   drawer with larger tap targets reads like the desktop nav folded
+		   sideways, which is what the user asked for. */
+		.pop-menu {
+			position: fixed;
+			inset: 0 0 0 auto;
+			bottom: 0;
+			left: auto;
+			right: 0;
+			top: 0;
+			width: min(88vw, 20rem);
+			max-height: 100dvh;
+			height: 100dvh;
+			border-radius: 0;
+			border: none;
+			border-left: 1px solid var(--color-border);
+			box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
+			padding: max(1rem, env(safe-area-inset-top, 0)) 1.2rem env(safe-area-inset-bottom, 0);
+			gap: 0.25rem;
+			overflow-y: auto;
+		}
+		.pop-menu .menu-item {
+			font-size: var(--text-base, 1rem);
+			padding: 0.85rem 0.9rem;
+			border-radius: var(--radius-md);
+			color: var(--color-text);
+		}
+		.pop-menu .menu-item:hover,
+		.pop-menu .menu-item:active {
+			background: var(--color-bg);
+		}
+		.pop-menu .menu-nav {
+			font-weight: 500;
+		}
+		.pop-menu .menu-item.active {
+			color: var(--color-primary);
+			font-weight: 600;
+		}
+		.pop-menu .menu-divider {
+			margin: 0.5rem 0;
 		}
 	}
 </style>
