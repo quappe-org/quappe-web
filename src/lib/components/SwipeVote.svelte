@@ -5,20 +5,33 @@
 
 	interface Props {
 		children: Snippet;
+		// Vote mode (backwards compatible): fires with 'support' or 'reject'.
 		oncast?: (type: VoteType, weight: number) => void;
+		// Generic-action mode: raw left/right callbacks. If either is given,
+		// it takes precedence over oncast for that direction. Used by feeds
+		// where a swipe means "mark read" (right) or "dismiss" (left), not
+		// a support/reject vote.
+		onSwipeRight?: () => void;
+		onSwipeLeft?: () => void;
 		enabled?: boolean;
 		allowNeutral?: boolean; // double-tap → neutral (theses only; off for arguments)
 		positiveLabel?: string;
 		negativeLabel?: string;
+		positiveColor?: string; // override the tint (defaults to support green)
+		negativeColor?: string;
 	}
 
 	let {
 		children,
 		oncast,
+		onSwipeRight,
+		onSwipeLeft,
 		enabled = true,
 		allowNeutral = true,
 		positiveLabel = 'support',
-		negativeLabel = 'reject'
+		negativeLabel = 'reject',
+		positiveColor = 'var(--color-support)',
+		negativeColor = 'var(--color-reject)'
 	}: Props = $props();
 
 	let root = $state<HTMLElement | null>(null);
@@ -87,8 +100,15 @@
 		dx = 0;
 
 		// Swipe cast
-		if (wasDragging && Math.abs(finalDx) >= SWIPE_THRESHOLD && oncast) {
-			oncast(finalDx > 0 ? 'support' : 'reject', 1);
+		if (wasDragging && Math.abs(finalDx) >= SWIPE_THRESHOLD) {
+			if (finalDx > 0) {
+				// Right: prefer generic action, fall back to support vote.
+				if (onSwipeRight) onSwipeRight();
+				else oncast?.('support', 1);
+			} else {
+				if (onSwipeLeft) onSwipeLeft();
+				else oncast?.('reject', 1);
+			}
 			lastTapAt = 0;
 			return;
 		}
@@ -119,7 +139,7 @@
 
 	let tintOpacity = $derived(Math.min(0.35, Math.abs(dx) / 300));
 	let tintColor = $derived(
-		dx > 0 ? 'var(--color-support)' : dx < 0 ? 'var(--color-reject)' : 'transparent'
+		dx > 0 ? positiveColor : dx < 0 ? negativeColor : 'transparent'
 	);
 </script>
 
@@ -148,6 +168,11 @@
 	.swipe-vote {
 		position: relative;
 		touch-action: pan-y;
+		/* Establish a stacking context so the tint layer (::after) reliably
+		   paints ABOVE the wrapped card even when the card sets its own
+		   position/z-index inside. Fixes argument-card swipe having no
+		   visible color feedback. */
+		isolation: isolate;
 	}
 
 	.swipe-active {
@@ -168,6 +193,7 @@
 		background: var(--tint-color);
 		opacity: var(--tint-opacity, 0);
 		pointer-events: none;
+		z-index: 2;
 		transition: opacity 0.1s;
 	}
 
@@ -180,6 +206,7 @@
 		pointer-events: none;
 		font-weight: 700;
 		font-size: 1.1rem;
+		z-index: 3;
 	}
 
 	.swipe-label {
