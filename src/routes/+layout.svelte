@@ -916,21 +916,34 @@
 			backdrop-filter: none;
 			-webkit-backdrop-filter: none;
 		}
-		/* Small popovers (budget / slider / theme) stay as bottom sheets —
-		   they're short and the bottom is thumb-friendly. */
+		/* On mobile the backdrop dims: makes clear the popover is modal and
+		   the rest of the page is inactive. */
+		.popover-backdrop {
+			background: rgba(0, 0, 0, 0.4);
+		}
+		/* Slider / theme / budget are centred modal cards with a real border
+		   and safe-area padding — no more bottom sheet with a barely-visible
+		   edge. Slightly larger font so the labels read on a phone. */
 		.popover {
 			position: fixed;
-			top: auto;
-			bottom: 0;
-			left: 0;
-			right: 0;
+			top: 50%;
+			left: 50%;
+			right: auto;
+			bottom: auto;
+			transform: translate(-50%, -50%);
 			z-index: 120;
-			border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-			min-width: 0;
-			max-height: min(70dvh, 70vh);
+			width: min(92vw, 22rem);
+			max-height: 85dvh;
+			border-radius: var(--radius-lg);
+			border: 1px solid var(--color-border);
+			box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+			padding: 1.1rem 1.2rem;
+			font-size: var(--text-base, 1rem);
 			overflow-y: auto;
 			-webkit-overflow-scrolling: touch;
-			padding-bottom: env(safe-area-inset-bottom, 0);
+		}
+		.popover .pop-title {
+			font-size: var(--text-base, 1rem);
 		}
 
 		/* The overflow menu becomes a right-anchored full-height drawer.
@@ -945,6 +958,7 @@
 			left: auto;
 			right: 0;
 			top: 0;
+			transform: none; /* the shared .popover rule centres via translate; drawer wants none */
 			width: min(88vw, 20rem);
 			max-height: 100dvh;
 			height: 100dvh;
