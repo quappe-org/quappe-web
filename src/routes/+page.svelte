@@ -6,8 +6,9 @@
 	import { budgetStore } from '$lib/stores/budget.svelte';
 	import { uiIntents } from '$lib/stores/ui.svelte';
 	import { getUserId } from '$lib/stores/user';
+	import { userIdTick } from '$lib/stores/user-tick.svelte';
 	import { interestsStore } from '$lib/stores/interests.svelte';
-	import { updatesStore, type UpdateEvent } from '$lib/stores/updates.svelte';
+	import { updatesStore, type UpdateGroup } from '$lib/stores/updates.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
 	import ScrollSentinel from '$lib/components/ScrollSentinel.svelte';
 	import { onMount } from 'svelte';
@@ -165,10 +166,11 @@
 	}
 
 	// ---- Merged personalized feed (default, no-filter view) ----
-	// Combines the user's updates (forks / new arguments / lifecycle) with fresh
-	// theses matching their followed interests, sorted newest-first.
+	// Combines the user's updates (aggregated per-thesis groups from
+	// /api/reports/updates) with fresh theses matching their followed
+	// interests, sorted newest-first.
 	type FeedItem =
-		| { kind: 'update'; at: string; sortKey: number; event: UpdateEvent }
+		| { kind: 'update_group'; at: string; sortKey: number; group: UpdateGroup }
 		| { kind: 'new_thesis'; at: string; sortKey: number; thesis: Thesis };
 
 	function tsOf(iso: string | undefined): number {
@@ -182,12 +184,14 @@
 
 	let feedItems = $derived.by<FeedItem[]>(() => {
 		if (typeof window === 'undefined') return [];
+		userIdTick();
 		const userId = getUserId();
 		const items: FeedItem[] = [];
 
-		// (a) Updates the user cares about.
-		for (const e of updatesStore.events) {
-			items.push({ kind: 'update', at: e.at, sortKey: tsOf(e.at), event: e });
+		// (a) Groups the user cares about — one per thesis, already
+		// aggregated by the server (forks / new arguments / lifecycle).
+		for (const g of updatesStore.groups) {
+			items.push({ kind: 'update_group', at: g.last_at, sortKey: tsOf(g.last_at), group: g });
 		}
 
 		// (b) New theses matching interests (or, if no interests, recent theses
@@ -195,8 +199,8 @@
 		const now = Date.now();
 		const hasInterests = interestsStore.hasInterests;
 		for (const t of allTheses) {
-			if (t.meta.author_id === userId) continue;
-			if (t.votes.some((v) => v.user_id === userId)) continue;
+			if (userId && t.meta.author_id === userId) continue;
+			if (userId && t.votes.some((v) => v.user_id === userId)) continue;
 			const created = tsOf(t.meta.created_at);
 			if (created > 0 && now - created > FEED_THESIS_MAX_AGE_MS) continue;
 			if (hasInterests && !matchesInterests(t)) continue;
@@ -255,11 +259,27 @@
 		return out;
 	});
 
-	// ---- Feed update-item helpers (mirrors /my/updates markup) ----
-	function updateTypeLabel(kind: UpdateEvent['kind']): string {
-		if (kind === 'fork') return m.updates_type_fork();
-		if (kind === 'new_argument') return m.updates_type_newarg();
-		return m.updates_type_lifecycle();
+	// ---- Feed update-group helpers ----
+	function groupSummary(g: UpdateGroup): string {
+		const parts: string[] = [];
+		if (g.new_arguments > 0) {
+			parts.push(
+				g.new_arguments === 1
+					? m.updates_group_new_arguments_one()
+					: m.updates_group_new_arguments_many({ count: g.new_arguments })
+			);
+		}
+		if (g.forks > 0) {
+			parts.push(
+				g.forks === 1
+					? m.updates_group_forks_one()
+					: m.updates_group_forks_many({ count: g.forks })
+			);
+		}
+		if (g.lifecycle_state) {
+			parts.push(m.updates_group_lifecycle({ state: g.lifecycle_state }));
+		}
+		return parts.join(m.updates_group_separator());
 	}
 
 	function fmtTime(iso: string): string {
@@ -279,27 +299,10 @@
 		}
 	}
 
-	function markUpdateRead(e: UpdateEvent) {
-		if (!e.read) updatesStore.markRead([e.event_key]);
+	function markGroupRead(g: UpdateGroup) {
+		if (!g.read) updatesStore.markGroupRead(g);
 	}
 
-	function keepOriginal(e: UpdateEvent) {
-		markUpdateRead(e);
-	}
-
-	async function switchToFork(e: UpdateEvent) {
-		markUpdateRead(e);
-		if (!e.fork_argument_id) return;
-		try {
-			await fetch(`/api/arguments/${e.fork_argument_id}/vote`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ type: 'support', weight: 1 })
-			});
-		} catch {
-			// non-fatal
-		}
-	}
 
 	// Feed is the default view; a filter switches to the plain thesis list.
 	let showFeed = $derived(!selectedFilter && !selectedHashtag && !isSearching);
@@ -771,7 +774,7 @@
 					{#each feedGroups as group (group.key)}
 						<div class="time-divider">{group.label}</div>
 						<div class="feed-list">
-							{#each group.items as item (item.kind === 'update' ? `u:${item.event.event_key}` : `t:${item.thesis.id}`)}
+							{#each group.items as item (item.kind === 'update_group' ? `g:${item.group.thesis_id}` : `t:${item.thesis.id}`)}
 								{#if item.kind === 'new_thesis'}
 									<div class="feed-thesis">
 										<span class="feed-new-badge">{m.feed_new_thesis_badge()}</span>
@@ -782,43 +785,22 @@
 										/>
 									</div>
 								{:else}
-									{@const e = item.event}
-									<div class="updates-item card updates-{e.kind}" class:is-read={e.read}>
-										<div class="updates-item-row">
-											<span class="updates-type updates-type-{e.kind}">{updateTypeLabel(e.kind)}</span>
-											<time class="updates-time">{fmtTime(e.at)}</time>
-											{#if e.kind === 'lifecycle' && e.lifecycle_state}
-												<span class="updates-lifecycle-state">{e.lifecycle_state}</span>
-											{/if}
-											<a class="updates-thesis" href="/thesis/{e.thesis_id}" onclick={() => markUpdateRead(e)}>{e.thesis_title}</a>
-											{#if !e.read}<span class="unread-dot" aria-label={m.updates_unread()}></span>{/if}
+									{@const g = item.group}
+									<a
+										class="updates-group card"
+										class:is-read={g.read}
+										href="/thesis/{g.thesis_id}"
+										onclick={() => markGroupRead(g)}
+									>
+										<div class="updates-group-row">
+											<span class="updates-group-title">{g.thesis_title}</span>
+											{#if !g.read}<span class="unread-dot" aria-label={m.updates_unread()}></span>{/if}
 										</div>
-
-										{#if e.kind === 'new_argument'}
-											<p class="updates-content">{e.argument_content}</p>
-										{:else if e.kind === 'lifecycle'}
-											<p class="updates-content-muted">{m.updates_lifecycle_now({ state: e.lifecycle_state ?? '' })}</p>
-										{:else if e.kind === 'fork'}
-											<div class="fork-inline">
-												<div class="fork-inline-pair">
-													<div class="fork-inline-side">
-														<span class="fork-inline-label">{m.updates_fork_original()}</span>
-														<p class="fork-inline-text">{e.original_content}</p>
-														<span class="fork-inline-votes">{e.original_votes ?? 0}</span>
-													</div>
-													<div class="fork-inline-side">
-														<span class="fork-inline-label fork-inline-label-new">{m.updates_fork_variant()}</span>
-														<p class="fork-inline-text">{e.fork_content}</p>
-														<span class="fork-inline-votes">{e.fork_votes ?? 0}</span>
-													</div>
-												</div>
-												<div class="fork-inline-actions">
-													<button class="fork-inline-btn" onclick={() => keepOriginal(e)}>{m.panel_fork_updates_keep_old()}</button>
-													<button class="fork-inline-btn fork-inline-switch" onclick={() => switchToFork(e)}>{m.panel_fork_updates_switch_new()}</button>
-												</div>
-											</div>
-										{/if}
-									</div>
+										<div class="updates-group-meta">
+											<span class="updates-group-summary">{groupSummary(g)}</span>
+											<time class="updates-group-time">{fmtTime(g.last_at)}</time>
+										</div>
+									</a>
 								{/if}
 							{/each}
 						</div>
@@ -1359,67 +1341,64 @@
 		box-shadow: var(--shadow-sm);
 	}
 
-	/* Update items (mirror /my/updates styling) */
-	.updates-item {
+	/* Update groups — one card per thesis, summary of what happened. */
+	.updates-group {
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
+		gap: 0.35rem;
 		position: relative;
 		padding: 0.75rem 1rem;
-		border-left: 3px solid transparent;
-		transition: opacity var(--transition-base);
-	}
-
-	.updates-item.is-read {
-		opacity: 0.6;
-	}
-
-	.updates-item.updates-fork { border-left-color: #f97316; }
-	.updates-item.updates-new_argument { border-left-color: var(--color-primary); }
-	.updates-item.updates-lifecycle { border-left-color: #8b5cf6; }
-
-	.updates-item-row {
-		display: flex;
-		align-items: baseline;
-		gap: 0.45rem;
-		flex-wrap: wrap;
-	}
-
-	.updates-type {
-		display: inline-block;
-		padding: 0.08rem 0.45rem;
-		font-size: 0.65rem;
-		font-weight: 700;
-		border-radius: var(--radius-sm);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		flex-shrink: 0;
-	}
-
-	.updates-type-fork { background: #ffedd5; color: #9a3412; }
-	.updates-type-new_argument { background: var(--color-primary-bg); color: var(--color-primary); }
-	.updates-type-lifecycle { background: #ede9fe; color: #5b21b6; }
-
-	.updates-time {
-		font-family: var(--font-mono);
-		font-size: var(--text-xs);
-		color: var(--color-text-light);
-		flex-shrink: 0;
-	}
-
-	.updates-thesis {
-		font-size: var(--text-sm);
-		color: var(--color-text);
+		border-left: 3px solid var(--color-primary);
 		text-decoration: none;
+		color: inherit;
+		transition: opacity var(--transition-base), background var(--transition-base);
+	}
+	.updates-group:hover {
+		background: var(--color-bg);
+	}
+	.updates-group.is-read {
+		opacity: 0.55;
+		border-left-color: var(--color-border);
+	}
+
+	.updates-group-row {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		min-width: 0;
+	}
+	.updates-group-title {
+		font-size: var(--text-sm);
+		font-weight: 500;
+		color: var(--color-text);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		min-width: 0;
 		flex: 1;
+		min-width: 0;
+	}
+	.updates-group:hover .updates-group-title {
+		color: var(--color-primary);
 	}
 
-	.updates-thesis:hover {
-		color: var(--color-primary);
+	.updates-group-meta {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		font-size: var(--text-xs);
+		color: var(--color-text-muted);
+	}
+	.updates-group-summary {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.updates-group-time {
+		font-family: var(--font-mono);
+		color: var(--color-text-light);
+		flex-shrink: 0;
 	}
 
 	.unread-dot {
@@ -1428,116 +1407,6 @@
 		border-radius: 50%;
 		background: var(--color-primary);
 		flex-shrink: 0;
-	}
-
-	.updates-lifecycle-state {
-		display: inline-block;
-		padding: 0.05rem 0.35rem;
-		font-size: 0.65rem;
-		font-weight: 600;
-		border-radius: var(--radius-sm);
-		text-transform: capitalize;
-		background: #ede9fe;
-		color: #5b21b6;
-	}
-
-	.updates-content,
-	.updates-content-muted {
-		margin: 0;
-		font-size: var(--text-sm);
-		line-height: 1.45;
-	}
-
-	.updates-content { color: var(--color-text); }
-	.updates-content-muted { color: var(--color-text-muted); }
-
-	.fork-inline {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.fork-inline-pair {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.5rem;
-	}
-
-	@media (max-width: 480px) {
-		.fork-inline-pair {
-			grid-template-columns: 1fr;
-		}
-	}
-
-	.fork-inline-side {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-		padding: 0.4rem 0.6rem;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg);
-	}
-
-	.fork-inline-label {
-		font-size: 0.6rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--color-text-muted);
-	}
-
-	.fork-inline-label-new {
-		color: #059669;
-	}
-
-	.fork-inline-text {
-		margin: 0;
-		font-size: var(--text-xs);
-		line-height: 1.4;
-		color: var(--color-text);
-	}
-
-	.fork-inline-votes {
-		font-size: 0.65rem;
-		font-weight: 600;
-		color: var(--color-text-light);
-		font-family: var(--font-mono);
-	}
-
-	.fork-inline-actions {
-		display: flex;
-		gap: 0.5rem;
-	}
-
-	.fork-inline-btn {
-		flex: 1;
-		font-size: var(--text-xs);
-		padding: 0.35rem 0.5rem;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--color-border);
-		background: var(--color-bg);
-		color: var(--color-text);
-		cursor: pointer;
-		font-family: inherit;
-		transition: background var(--transition-base), border-color var(--transition-base);
-	}
-
-	.fork-inline-btn:hover {
-		background: var(--color-border);
-	}
-
-	.fork-inline-switch {
-		background: #ecfdf5;
-		border-color: #6ee7b7;
-		color: #059669;
-		font-weight: 600;
-	}
-
-	.fork-inline-switch:hover {
-		background: #059669;
-		border-color: #059669;
-		color: white;
 	}
 
 	.limit-note {
