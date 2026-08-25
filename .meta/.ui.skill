@@ -66,7 +66,80 @@ Row 0 anatomy (left → right):
   - Overflow `⋯` — popover menu: Pulse · About · Settings.
 
 Popovers are transient: close on outside click (a full-screen invisible
-backdrop), Escape, or navigation. On mobile they become bottom-sheets.
+backdrop), Escape, or navigation.
+
+**Mobile overlay shapes (deliberate, do not homogenise):**
+- **Overflow menu** → right-anchored full-height **drawer** (min(88vw, 20rem)),
+  larger tap targets. Reason: the mobile menu holds the primary nav; a bottom
+  sheet made it feel like a transient popover and cramped the labels. A drawer
+  reads like the desktop nav folded sideways.
+- **Slider / Budget / Theme** → centred **modal cards** with a real border,
+  soft shadow, and a **dimmed backdrop** (rgba(0,0,0,0.4)). Reason: users
+  couldn't tell the bottom-sheet edge was there; centred cards read as modal.
+- These two shapes are intentional siblings, not inconsistency. If in doubt:
+  primary-nav / action-list → drawer; picker or settings widget → modal.
+
+
+# Personal feed (/) — aggregation & per-thesis grouping
+
+The landing feed pulls `/api/reports/updates`, which returns a `groups[]`
+array — **one entry per thesis**, not per event. Render one small card per
+group:
+- **Title** (thesis title, ellipsised).
+- **Kind chips** — one per event kind, count inside: "3 new arguments",
+  "1 fork", "now discussed". Colour-coded (blue = new argument, orange = fork,
+  purple = lifecycle) with a small icon.
+- **Time** (rightmost, monospace).
+
+The whole card is a link to /thesis/{id}; clicking marks the group's
+`event_keys` as read in one PUT.
+
+**Swipe (touch only):**
+- Right → mark the group as read.
+- Left → session-only dismiss (removed from the feed until reload; nothing
+  written to the server — the user just wants it out of their face now).
+
+**Never render raw event tiles here.** The aggregated view is the contract;
+`events[]` is still in the response for `/my/updates` (which is event-grain)
+and for read-tracking round-trips.
+
+
+# Feed vote handling — grey out, then fade
+
+Voting on a thesis card from the feed does NOT hide it immediately (that used
+to be the case; the list yanking felt wrong). Instead:
+- The card gets `.just-voted` (opacity 0.35, slight scale-down, pointer-events
+  off).
+- After ~1.4s the id is added to `justVotedRemoved` and drops out of
+  `feedItems`.
+- The pre-load "already-voted" snapshot (`alreadyVoted`) is still frozen so
+  nothing rearranges from BEFORE the user showed up. Only in-session votes fade.
+
+The state is on the page, not in the card. Cards fire `onvoted?.()` after the
+server confirms; the page owns the fade timer and the removal.
+
+
+# Argument sort — freeze + explicit "apply new sort" chip
+
+On `/thesis/[id]` the argument columns are sorted by group score, but the
+order is **frozen** — numbers change in place, tiles do not jump around. This
+mirrors X/Twitter's "N new posts" pill:
+
+- New arguments arriving via the 15s poll, or live score changes that would
+  meaningfully change the top-3, increment `pendingReorderCount`.
+- When > 0 a `.reorder-chip` appears above the columns ("N new positions —
+  apply sort"). Tapping it calls `recomputeOrder()`, which reseeds `frozenRank`
+  and clears the pending count.
+- Users always know when a re-sort will happen; the tiles never move under
+  their fingers mid-read.
+
+
+# Site banner — dismissible per text hash
+
+The admin-configurable banner has a × dismiss button. Dismissal is keyed by
+a djb2 hash of the current text and persisted to localStorage. If the operator
+changes the text, the hash no longer matches and the new banner shows again —
+no per-viewer intervention needed.
 
 
 # Views
