@@ -1032,7 +1032,7 @@
 			bottom: 0;
 			left: 0;
 			right: 0;
-			z-index: 100;
+			z-index: 101;
 			background: var(--color-surface);
 			border-top: 1px solid var(--color-border);
 			padding-bottom: env(safe-area-inset-bottom, 0);
