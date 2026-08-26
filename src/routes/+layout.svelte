@@ -419,6 +419,14 @@
 		border-bottom: 1px solid var(--color-border);
 	}
 
+	/* Remove backdrop-filter when any popover is open — backdrop-filter creates
+	   a new containing block, which breaks position:fixed children (they end up
+	   positioned relative to the bar, not the viewport). */
+	.topbar.popover-active {
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+	}
+
 	.topbar-inner {
 		max-width: 1200px;
 		margin: 0 auto;

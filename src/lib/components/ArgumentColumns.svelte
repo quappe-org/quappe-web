@@ -163,9 +163,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		padding: 0.875rem;
-		border-radius: var(--radius-md);
-		border: 1px solid var(--color-border);
+		padding: 0;
 	}
 
 	.col-header {
@@ -178,17 +176,18 @@
 	}
 
 	.opinion-view {
-		display: inline-flex;
+		display: flex;
+		width: 100%;
 		gap: 2px;
 		background: var(--color-border);
 		border-radius: var(--radius-md);
 		overflow: hidden;
 		margin-bottom: 1rem;
-		flex-wrap: wrap;
 	}
 
 	.ov-btn {
-		padding: 0.55rem 1.1rem;
+		flex: 1;
+		padding: 0.55rem 0.5rem;
 		font-size: var(--text-sm);
 		font-weight: 500;
 		font-family: inherit;
@@ -197,6 +196,8 @@
 		border: none;
 		cursor: pointer;
 		transition: background var(--transition-fast), color var(--transition-fast);
+		text-align: center;
+		white-space: nowrap;
 	}
 
 	.ov-btn:hover {
@@ -242,7 +243,7 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0;
 	}
 
 	.arguments-list :global(.argument-card) {

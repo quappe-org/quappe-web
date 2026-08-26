@@ -17,6 +17,7 @@
 
 	let mode = $state<ArgFormMode>('new');
 	let content = $state('');
+	let sourceContent = $state<string | null>(null); // original text shown read-only in fork mode
 	let forkedFromId = $state<string | undefined>(undefined);
 	let editingId = $state<string | undefined>(undefined);
 	let submitting = $state(false);
@@ -25,6 +26,7 @@
 	export function openNew() {
 		mode = 'new';
 		content = '';
+		sourceContent = null;
 		forkedFromId = undefined;
 		editingId = undefined;
 		error = null;
@@ -33,6 +35,7 @@
 	export function openFork(source: Argument) {
 		mode = 'fork';
 		content = source.content;
+		sourceContent = source.content;
 		forkedFromId = source.id;
 		editingId = undefined;
 		error = null;
@@ -41,6 +44,7 @@
 	export function openEdit(target: Argument) {
 		mode = 'edit';
 		content = target.content;
+		sourceContent = null;
 		forkedFromId = target.forked_from_id;
 		editingId = target.id;
 		error = null;
@@ -133,8 +137,8 @@
 		{#if mode === 'edit'}{m.argform_title_edit()}{:else if mode === 'fork'}{m.argform_title_fork()}{:else}{m.argform_title_new()}{/if}
 	</h3>
 
-	{#if mode === 'fork'}
-		<p class="form-hint">{m.argform_fork_hint()}</p>
+	{#if mode === 'fork' && sourceContent}
+		<blockquote class="fork-source">{sourceContent}</blockquote>
 	{/if}
 
 	<div class="form-group">
@@ -166,9 +170,17 @@
 		font-weight: 600;
 	}
 
-	.form-hint {
+	.fork-source {
+		margin: 0;
+		padding: 0.6rem 0.8rem;
+		border-left: 3px solid var(--color-border);
+		background: var(--color-bg);
+		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 		font-size: var(--text-sm);
 		color: var(--color-text-muted);
+		font-style: italic;
+		white-space: pre-wrap;
+		word-break: break-word;
 	}
 
 	.hint-inline {
