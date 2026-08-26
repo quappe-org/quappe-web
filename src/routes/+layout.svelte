@@ -933,7 +933,7 @@
 		.secondary-action > .action-btn { display: none; }
 		.menu-item-mobile { display: block; }
 		.action-new-label { display: none; }
-		.action-new { width: 2.1rem; padding: 0; }
+		.action-new { display: none; }
 		.actions { margin-left: auto; }
 		.main { padding: 1.5rem 1rem 5.5rem; }
 		/* Kill backdrop-filter when a popover is open so position:fixed
