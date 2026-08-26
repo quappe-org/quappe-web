@@ -41,6 +41,17 @@
 		onneedthesisvote,
 		onopinionchange
 	}: Props = $props();
+
+	// Local-only ignore list — no API call, no budget cost.
+	let ignoredIds = $state(new Set<string>());
+
+	let visibleTop = $derived(topGroups.filter((g) => !ignoredIds.has(g.root.id)));
+	let visiblePool = $derived(poolGroups.filter((g) => !ignoredIds.has(g.root.id)));
+	let visibleTotal = $derived(totalArguments - ignoredIds.size);
+
+	function ignore(id: string) {
+		ignoredIds = new Set([...ignoredIds, id]);
+	}
 </script>
 
 {#if pendingReorderCount > 0}
@@ -61,7 +72,7 @@
 	<div class="col-header">
 		<h2 class="col-title">
 			{m.argcol_arguments()}
-			<span class="col-count">({totalArguments})</span>
+			<span class="col-count">({visibleTotal})</span>
 		</h2>
 		<button
 			class="btn btn-sm add-arg-btn"
@@ -74,17 +85,22 @@
 		<button class="ov-btn" class:active={opinionView === 'rejecters'} onclick={() => onopinionchange('rejecters')}>{m.opinion_view_rejecters()}</button>
 	</div>
 	<div class="arguments-list">
-		{#each topGroups as g, idx (g.root.id)}
-			<ArgumentCard
-				argument={g.root}
-				leading={idx === 0}
-				variants={g.variants}
-				onFork={onfork}
-				onEdit={onedit}
-				onNeedThesisVote={onneedthesisvote}
-			/>
+		{#each visibleTop as g, idx (g.root.id)}
+			<div class="arg-row">
+				<ArgumentCard
+					argument={g.root}
+					leading={idx === 0}
+					variants={g.variants}
+					onFork={onfork}
+					onEdit={onedit}
+					onNeedThesisVote={onneedthesisvote}
+				/>
+				<button class="ignore-btn" onclick={() => ignore(g.root.id)} title="Ausblenden" aria-label="Argument ausblenden">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+				</button>
+			</div>
 		{/each}
-		{#if topGroups.length === 0}
+		{#if visibleTop.length === 0}
 			<p class="col-empty">{m.argcol_empty_support()}</p>
 		{/if}
 	</div>
@@ -95,12 +111,12 @@
 		<h3 class="argument-pool-title">{m.argpool_title()}</h3>
 		<p class="argument-pool-hint">{m.argpool_hint()}</p>
 	</header>
-	{#if poolGroups.length === 0}
+	{#if visiblePool.length === 0}
 		<p class="argument-pool-empty">{m.argpool_empty()}</p>
 	{:else}
 		<ul class="argument-pool-list">
-			{#each poolGroups as g (g.root.id)}
-				<li class="argument-pool-item">
+			{#each visiblePool as g (g.root.id)}
+				<li class="argument-pool-item arg-row">
 				<ArgumentCard
 					argument={g.root}
 					variants={g.variants}
@@ -108,6 +124,9 @@
 					onEdit={onedit}
 					onNeedThesisVote={onneedthesisvote}
 				/>
+				<button class="ignore-btn" onclick={() => ignore(g.root.id)} title="Ausblenden" aria-label="Argument ausblenden">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+				</button>
 				</li>
 			{/each}
 		</ul>
@@ -229,6 +248,40 @@
 	.arguments-list :global(.argument-card) {
 		position: relative;
 		z-index: 1;
+	}
+
+	/* Ignore button wrapper */
+	.arg-row {
+		position: relative;
+	}
+
+	.ignore-btn {
+		position: absolute;
+		top: 0.4rem;
+		right: 0.4rem;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		border-radius: 50%;
+		border: none;
+		background: transparent;
+		color: var(--color-text-light);
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+	}
+
+	.arg-row:hover .ignore-btn,
+	.arg-row:focus-within .ignore-btn {
+		opacity: 1;
+	}
+
+	.ignore-btn:hover {
+		background: var(--color-bg);
+		color: var(--color-text-muted);
 	}
 
 	.col-empty {
