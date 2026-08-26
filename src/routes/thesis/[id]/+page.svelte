@@ -214,7 +214,8 @@
 
 	let poolGroups = $derived.by(() => {
 		const topIds = new Set<string>(topGroups.map((g) => g.root.id));
-		return visibleArgGroups.filter((g) => !topIds.has(g.root.id)).sort(byFrozen);
+		const rest = visibleArgGroups.filter((g) => !topIds.has(g.root.id)).sort(byFrozen);
+		return rest.slice(0, complexityStore.settings.max_arguments * 2);
 	});
 
 	let totalArguments = $derived(argGroups.length);
