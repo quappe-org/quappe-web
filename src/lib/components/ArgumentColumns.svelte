@@ -243,7 +243,7 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		gap: 0;
+		gap: 0.75rem;
 	}
 
 	.arguments-list :global(.argument-card) {

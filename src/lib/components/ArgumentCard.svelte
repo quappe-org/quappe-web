@@ -323,24 +323,24 @@
 
 <style>
 	.argument-card {
-		background: transparent;
-		border: none;
-		border-bottom: 1px solid var(--color-border);
-		border-radius: 0;
-		padding: var(--space-md) 0;
-		transition: background var(--transition-fast);
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: var(--space-md);
+		transition: box-shadow var(--transition-fast);
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
 	}
 
 	.argument-card:hover {
-		background: var(--color-bg);
+		box-shadow: var(--shadow-sm);
 	}
 
 	.argument-card.argument-leading {
-		padding: calc(var(--space-md) * 1.1) 0;
-		border-bottom-width: 2px;
+		padding: calc(var(--space-md) * 1.35);
+		border-width: 1.5px;
+		box-shadow: var(--shadow-sm);
 	}
 
 	.argument-card.argument-leading .argument-content {
