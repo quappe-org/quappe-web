@@ -373,6 +373,27 @@
 	<main class="main">
 		{@render children()}
 	</main>
+
+	<!-- Mobile bottom tab bar -->
+	<nav class="bottom-tab-bar" aria-label="Primary navigation">
+		<a href="/" class="tab-item" class:active={isActive('/')} onclick={closeAllPopovers}>
+			<svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+			<span class="tab-label">{m.nav_trending()}</span>
+			{#if mounted && unreadCount > 0}<span class="tab-badge">{unreadCount}</span>{/if}
+		</a>
+
+		<button class="tab-item tab-new" onclick={newThesis} aria-label={m.nav_new_thesis_hint()}>
+			<span class="tab-new-circle">
+				<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+			</span>
+			<span class="tab-label">{m.nav_new_thesis()}</span>
+		</button>
+
+		<a href="/my" class="tab-item" class:active={isActive('/my')} onclick={closeAllPopovers}>
+			<svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+			<span class="tab-label">{m.nav_my_theses()}</span>
+		</a>
+	</nav>
 </div>
 {/if}
 
@@ -852,6 +873,11 @@
 		min-width: 0;
 	}
 
+	/* ---- Bottom tab bar (mobile only, hidden on desktop) ---- */
+	.bottom-tab-bar {
+		display: none;
+	}
+
 	/* ---- Site banner (admin-configurable) ---- */
 	.site-banner {
 		display: flex;
@@ -909,7 +935,7 @@
 		.action-new-label { display: none; }
 		.action-new { width: 2.1rem; padding: 0; }
 		.actions { margin-left: auto; }
-		.main { padding: 1.5rem 1rem 3rem; }
+		.main { padding: 1.5rem 1rem 5.5rem; }
 		/* Kill backdrop-filter when a popover is open so position:fixed
 		   escapes to viewport (backdrop-filter creates a containing block). */
 		.topbar.popover-active {
@@ -989,6 +1015,88 @@
 		}
 		.pop-menu .menu-divider {
 			margin: 0.5rem 0;
+		}
+
+		/* Bottom tab bar */
+		.bottom-tab-bar {
+			display: flex;
+			position: fixed;
+			bottom: 0;
+			left: 0;
+			right: 0;
+			z-index: 100;
+			background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+			backdrop-filter: saturate(1.4) blur(10px);
+			-webkit-backdrop-filter: saturate(1.4) blur(10px);
+			border-top: 1px solid var(--color-border);
+			padding-bottom: env(safe-area-inset-bottom, 0);
+		}
+
+		.tab-item {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 0.2rem;
+			padding: 0.55rem 0.5rem;
+			position: relative;
+			color: var(--color-text-muted);
+			text-decoration: none;
+			background: transparent;
+			border: none;
+			font-family: inherit;
+			cursor: pointer;
+			transition: color var(--transition-fast);
+		}
+
+		.tab-item.active {
+			color: var(--color-primary);
+		}
+
+		.tab-icon {
+			flex-shrink: 0;
+		}
+
+		.tab-label {
+			font-size: 0.65rem;
+			font-weight: 500;
+			white-space: nowrap;
+			line-height: 1;
+		}
+
+		.tab-badge {
+			position: absolute;
+			top: 0.35rem;
+			left: calc(50% + 0.5rem);
+			min-width: 1rem;
+			height: 1rem;
+			padding: 0 0.25rem;
+			background: var(--color-primary);
+			color: white;
+			font-size: 0.58rem;
+			font-weight: 700;
+			border-radius: 999px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			line-height: 1;
+		}
+
+		.tab-new-circle {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 2.4rem;
+			height: 2.4rem;
+			border-radius: 50%;
+			background: var(--color-primary);
+			color: white;
+			margin-bottom: 0.05rem;
+		}
+
+		.tab-new {
+			color: var(--color-text-muted);
 		}
 	}
 </style>
