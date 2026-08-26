@@ -943,7 +943,15 @@
 		.action-new-label { display: none; }
 		.action-new { display: none; }
 		.actions { margin-left: auto; }
-		.main { padding: 1.5rem 1rem 5.5rem; }
+		/* Fix topbar: sticky breaks when browser chrome resizes on scroll.
+		   Use fixed instead and compensate with padding-top on main. */
+		.topbar {
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+		}
+		.main { padding: 4.5rem 1rem 5.5rem; }
 		/* Kill backdrop-filter when a popover is open so position:fixed
 		   escapes to viewport (backdrop-filter creates a containing block). */
 		.topbar.popover-active {
