@@ -267,20 +267,14 @@
 		height: 1.5rem;
 		border-radius: 50%;
 		border: none;
-		background: transparent;
+		background: var(--color-bg);
 		color: var(--color-text-light);
 		cursor: pointer;
-		opacity: 0;
-		transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
-	}
-
-	.arg-row:hover .ignore-btn,
-	.arg-row:focus-within .ignore-btn {
-		opacity: 1;
+		transition: background var(--transition-fast), color var(--transition-fast);
 	}
 
 	.ignore-btn:hover {
-		background: var(--color-bg);
+		background: var(--color-border);
 		color: var(--color-text-muted);
 	}
 
