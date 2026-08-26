@@ -960,8 +960,8 @@
 		   edge. Slightly larger font so the labels read on a phone. */
 		.popover {
 			position: fixed;
-			top: 50%;
-			left: 50%;
+			top: 50dvh;
+			left: 50dvw;
 			right: auto;
 			bottom: auto;
 			transform: translate(-50%, -50%);
@@ -1033,9 +1033,7 @@
 			left: 0;
 			right: 0;
 			z-index: 100;
-			background: color-mix(in srgb, var(--color-surface) 92%, transparent);
-			backdrop-filter: saturate(1.4) blur(10px);
-			-webkit-backdrop-filter: saturate(1.4) blur(10px);
+			background: var(--color-surface);
 			border-top: 1px solid var(--color-border);
 			padding-bottom: env(safe-area-inset-bottom, 0);
 		}
