@@ -19,6 +19,8 @@
 		pendingReorderCount: number;
 		complexityCapped: boolean;
 		opinionView: OpinionView;
+		/** Has the viewer cast a thesis vote? Gates argument create/fork (matches the server). */
+		hasThesisVote: boolean;
 		onreorder: () => void;
 		onopenarg: () => void;
 		onfork: (source: Argument) => void;
@@ -34,6 +36,7 @@
 		pendingReorderCount,
 		complexityCapped,
 		opinionView,
+		hasThesisVote,
 		onreorder,
 		onopenarg,
 		onfork,
@@ -41,6 +44,13 @@
 		onneedthesisvote,
 		onopinionchange
 	}: Props = $props();
+
+	// Adding an argument requires a thesis vote first (server gate). Without one,
+	// nudge the user to the thesis rather than opening a form that would 403.
+	function requestAddArg() {
+		if (hasThesisVote) onopenarg();
+		else onneedthesisvote();
+	}
 
 	// Local-only ignore list — no API call, no budget cost.
 	let ignoredIds = $state(new Set<string>());
@@ -76,13 +86,15 @@
 		</h2>
 		<button
 			class="btn btn-sm add-arg-btn"
-			onclick={onopenarg}
+			class:locked={!hasThesisVote}
+			title={hasThesisVote ? undefined : m.thesis_vote_first_hint()}
+			onclick={requestAddArg}
 		>{m.argcol_add_arg()}</button>
 	</div>
-	<div class="opinion-view" role="group" aria-label={m.opinion_view_label()}>
-		<button class="ov-btn" class:active={opinionView === 'all'} onclick={() => onopinionchange('all')}>{m.opinion_view_all()}</button>
-		<button class="ov-btn" class:active={opinionView === 'supporters'} onclick={() => onopinionchange('supporters')}>{m.opinion_view_supporters()}</button>
-		<button class="ov-btn" class:active={opinionView === 'rejecters'} onclick={() => onopinionchange('rejecters')}>{m.opinion_view_rejecters()}</button>
+	<div class="segmented segmented--fill opinion-view" role="group" aria-label={m.opinion_view_label()}>
+		<button class="segmented-btn" class:active={opinionView === 'all'} onclick={() => onopinionchange('all')}>{m.opinion_view_all()}</button>
+		<button class="segmented-btn" class:active={opinionView === 'supporters'} onclick={() => onopinionchange('supporters')}>{m.opinion_view_supporters()}</button>
+		<button class="segmented-btn" class:active={opinionView === 'rejecters'} onclick={() => onopinionchange('rejecters')}>{m.opinion_view_rejecters()}</button>
 	</div>
 	<div class="arguments-list">
 		{#each visibleTop as g, idx (g.root.id)}
@@ -91,6 +103,7 @@
 					argument={g.root}
 					leading={idx === 0}
 					variants={g.variants}
+					{hasThesisVote}
 					onFork={onfork}
 					onEdit={onedit}
 					onNeedThesisVote={onneedthesisvote}
@@ -120,6 +133,7 @@
 				<ArgumentCard
 					argument={g.root}
 					variants={g.variants}
+					{hasThesisVote}
 					onFork={onfork}
 					onEdit={onedit}
 					onNeedThesisVote={onneedthesisvote}
@@ -175,39 +189,9 @@
 		padding-bottom: 0.375rem;
 	}
 
+	/* Spacing-only; visual style comes from the shared .segmented classes. */
 	.opinion-view {
-		display: flex;
-		width: 100%;
-		gap: 2px;
-		background: var(--color-border);
-		border-radius: var(--radius-md);
-		overflow: hidden;
 		margin-bottom: 1rem;
-	}
-
-	.ov-btn {
-		flex: 1;
-		padding: 0.55rem 0.5rem;
-		font-size: var(--text-sm);
-		font-weight: 500;
-		font-family: inherit;
-		background: var(--color-surface);
-		color: var(--color-text-muted);
-		border: none;
-		cursor: pointer;
-		transition: background var(--transition-fast), color var(--transition-fast);
-		text-align: center;
-		white-space: nowrap;
-	}
-
-	.ov-btn:hover {
-		color: var(--color-text);
-	}
-
-	.ov-btn.active {
-		background: var(--color-primary-bg);
-		color: var(--color-primary);
-		font-weight: 600;
 	}
 
 	.col-title {
@@ -237,6 +221,12 @@
 	.add-arg-btn:hover:not(:disabled) {
 		background: var(--color-surface);
 		color: var(--color-text);
+	}
+
+	/* Locked = no thesis vote yet. Still clickable (nudges to vote), but dimmed
+	   with a lock affordance so it reads as "do the thesis vote first". */
+	.add-arg-btn.locked {
+		opacity: 0.6;
 	}
 
 	.arguments-list {

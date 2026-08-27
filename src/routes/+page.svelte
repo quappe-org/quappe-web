@@ -12,6 +12,7 @@
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
 	import SearchBox from '$lib/components/SearchBox.svelte';
 	import CreateThesisForm from '$lib/components/CreateThesisForm.svelte';
+	import Popup from '$lib/components/Popup.svelte';
 	import FeedList from '$lib/components/FeedList.svelte';
 	import { onMount } from 'svelte';
 	import { m } from '$lib/paraglide/messages';
@@ -84,9 +85,6 @@
 		if (count > _lastSeenIntent) {
 			_lastSeenIntent = count;
 			showForm = true;
-			setTimeout(() => {
-				document.querySelector('.create-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-			}, 50);
 		}
 	});
 
@@ -416,7 +414,7 @@
 			{/if}
 		</div>
 
-		{#if showForm}
+		<Popup open={showForm} variant="modal" cardClass="create-thesis-card" backdropClose={false} onclose={() => { showForm = false; }}>
 			<CreateThesisForm
 				bind:suggestedCategories
 				bind:suggestedForThesis
@@ -425,7 +423,7 @@
 				onapplysuggested={applySuggested}
 				ondismisssuggested={() => { suggestedCategories = []; suggestedForThesis = null; }}
 			/>
-		{/if}
+		</Popup>
 
 		{#if showFeed}
 			<div class="section">
@@ -481,6 +479,12 @@
 </section>
 
 <style>
+	/* New-thesis modal: the creation form is far taller/wider than the default
+	   Popup card, so widen it. Lives inside Popup, hence :global. */
+	:global(.create-thesis-card) {
+		width: min(94vw, 34rem);
+	}
+
 	.page {
 		display: flex;
 		flex-direction: column;

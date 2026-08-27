@@ -60,14 +60,14 @@
 
 <section class="page">
 	<div class="section">
-		<div class="rank-switch" role="group" aria-label={m.top_filter_title()}>
-			<button class="rs-btn" class:active={view === 'trending'} onclick={() => loadView('trending')}>
+		<div class="segmented rank-switch" role="group" aria-label={m.top_filter_title()}>
+			<button class="segmented-btn" class:active={view === 'trending'} onclick={() => loadView('trending')}>
 				{m.top_view_trending()}
 			</button>
-			<button class="rs-btn" class:active={view === 'top'} onclick={() => loadView('top')}>
+			<button class="segmented-btn" class:active={view === 'top'} onclick={() => loadView('top')}>
 				{m.top_view_top()}
 			</button>
-			<button class="rs-btn" class:active={view === 'crystallized'} onclick={() => loadView('crystallized')}>
+			<button class="segmented-btn" class:active={view === 'crystallized'} onclick={() => loadView('crystallized')}>
 				{m.top_view_crystallized()}
 			</button>
 		</div>
@@ -128,36 +128,9 @@
 	}
 
 	/* Segmented 3-way switch */
+	/* Layout-only tweak; visual style comes from the shared .segmented classes. */
 	.rank-switch {
-		display: inline-flex;
-		gap: 2px;
-		background: var(--color-border);
-		border-radius: var(--radius-md);
-		overflow: hidden;
 		align-self: flex-start;
-		flex-wrap: wrap;
-	}
-
-	.rs-btn {
-		padding: 0.45rem 1rem;
-		font-size: var(--text-sm);
-		font-weight: 500;
-		font-family: inherit;
-		background: var(--color-surface);
-		color: var(--color-text-muted);
-		border: none;
-		cursor: pointer;
-		transition: background var(--transition-fast), color var(--transition-fast);
-	}
-
-	.rs-btn:hover {
-		color: var(--color-text);
-	}
-
-	.rs-btn.active {
-		background: var(--color-primary-bg);
-		color: var(--color-primary);
-		font-weight: 600;
 	}
 
 	.grid.is-loading {

@@ -6,53 +6,45 @@
 
 	type ArgFormMode = 'new' | 'fork' | 'edit';
 
+	// The form is opened declaratively: the page sets `intent` and mounts us.
+	// (An imperative ref was racy — this component is rendered behind {#if},
+	// so a ref call fired in the same tick as the mount hit a null ref and the
+	// form silently opened in its default 'new' state. Props avoid that.)
+	export interface ArgFormIntent {
+		mode: ArgFormMode;
+		source?: Argument; // the argument being forked or edited
+	}
+
 	interface Props {
 		thesisId: string;
+		intent: ArgFormIntent;
 		onsubmitted: (arg: Argument, mode: ArgFormMode) => void;
 		oncancel: () => void;
 		onneedthesisvote: () => void;
 	}
 
-	let { thesisId, onsubmitted, oncancel, onneedthesisvote }: Props = $props();
+	let { thesisId, intent, onsubmitted, oncancel, onneedthesisvote }: Props = $props();
 
-	let mode = $state<ArgFormMode>('new');
+	let mode = $derived(intent.mode);
+	let sourceContent = $derived(intent.mode === 'fork' ? (intent.source?.content ?? null) : null);
+	let forkedFromId = $derived(
+		intent.mode === 'fork' ? intent.source?.id
+		: intent.mode === 'edit' ? intent.source?.forked_from_id
+		: undefined
+	);
+	let editingId = $derived(intent.mode === 'edit' ? intent.source?.id : undefined);
+
+	// Content is seeded from the intent, then user-editable. Re-seeds whenever
+	// a new intent arrives (opening fork/edit prefills; opening new clears).
 	let content = $state('');
-	let sourceContent = $state<string | null>(null); // original text shown read-only in fork mode
-	let forkedFromId = $state<string | undefined>(undefined);
-	let editingId = $state<string | undefined>(undefined);
+	$effect(() => {
+		content = intent.mode === 'new' ? '' : (intent.source?.content ?? '');
+	});
+
 	let submitting = $state(false);
 	let error = $state<string | null>(null);
 
-	export function openNew() {
-		mode = 'new';
-		content = '';
-		sourceContent = null;
-		forkedFromId = undefined;
-		editingId = undefined;
-		error = null;
-	}
-
-	export function openFork(source: Argument) {
-		mode = 'fork';
-		content = source.content;
-		sourceContent = source.content;
-		forkedFromId = source.id;
-		editingId = undefined;
-		error = null;
-	}
-
-	export function openEdit(target: Argument) {
-		mode = 'edit';
-		content = target.content;
-		sourceContent = null;
-		forkedFromId = target.forked_from_id;
-		editingId = target.id;
-		error = null;
-	}
-
 	function cancel() {
-		editingId = undefined;
-		forkedFromId = undefined;
 		error = null;
 		oncancel();
 	}

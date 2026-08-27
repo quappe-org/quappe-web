@@ -208,6 +208,25 @@
 				<a href="/pulse" class="topnav-item" class:active={isActive('/pulse')}>{m.nav_community_pulse()}</a>
 			</nav>
 
+			<!-- Mobile-only top nav: Feed · (centred + bubble) · Mine -->
+			<nav class="mobile-topnav" aria-label="Primary">
+				<a href="/" class="mobile-topnav-item nav-feed" class:active={isActive('/')} onclick={closeAllPopovers}>
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+					<span class="mobile-topnav-label">{m.nav_trending()}</span>
+					{#if mounted && unreadCount > 0}<span class="mobile-nav-badge">{unreadCount}</span>{/if}
+				</a>
+
+				<a href="/my" class="mobile-topnav-item nav-mine" class:active={isActive('/my')} onclick={closeAllPopovers}>
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+					<span class="mobile-topnav-label">{m.nav_my_theses()}</span>
+				</a>
+			</nav>
+
+			<!-- Centred + bubble (absolutely centred to the bar; overshoots downward) -->
+			<button class="mobile-new-bubble" onclick={newThesis} aria-label={m.nav_new_thesis_hint()}>
+				<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+			</button>
+
 			<div class="actions">
 				<button class="action-btn action-new" onclick={newThesis} title={m.nav_new_thesis_hint()}>
 					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -328,13 +347,8 @@
 					</button>
 					{#if menuOpen}
 						<div class="popover pop-menu">
-							<!-- Primary navigation (mobile only — desktop has the top nav) -->
-							<a href="/" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/')} onclick={closeAllPopovers}>
-								{m.nav_trending()}
-								{#if mounted && unreadCount > 0}<span class="nav-badge">{unreadCount}</span>{/if}
-							</a>
+							<!-- Secondary nav — Feed/Mine are in topnav; Top/Pulse are "more" -->
 							<a href="/top" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/top')} onclick={closeAllPopovers}>{m.nav_top()}</a>
-							<a href="/my" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/my')} onclick={closeAllPopovers}>{m.nav_my_theses()}</a>
 							<a href="/pulse" class="menu-item menu-item-mobile menu-nav" class:active={isActive('/pulse')} onclick={closeAllPopovers}>{m.nav_community_pulse()}</a>
 							<div class="menu-divider menu-item-mobile"></div>
 							<button type="button" class="menu-item menu-item-mobile" onclick={toggleSlider}>{m.panel_complexity_title()}</button>
@@ -356,44 +370,25 @@
 	{/if}
 
 	<!-- ROW 1+: main content, centred editorial column -->
-	{#if bannerStore.visible}
-		<div class="site-banner" role="status">
-			<span class="site-banner-text">{bannerStore.text}</span>
-			<button
-				type="button"
-				class="site-banner-dismiss"
-				onclick={() => bannerStore.dismiss()}
-				title="Dismiss"
-				aria-label="Dismiss banner"
-			>
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-			</button>
-		</div>
-	{/if}
-	<main class="main">
-		{@render children()}
-	</main>
-
-	<!-- Mobile bottom tab bar -->
-	<nav class="bottom-tab-bar" aria-label="Primary navigation">
-		<a href="/" class="tab-item" class:active={isActive('/')} onclick={closeAllPopovers}>
-			<svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-			<span class="tab-label">{m.nav_trending()}</span>
-			{#if mounted && unreadCount > 0}<span class="tab-badge">{unreadCount}</span>{/if}
-		</a>
-
-		<button class="tab-item tab-new" onclick={newThesis} aria-label={m.nav_new_thesis_hint()}>
-			<span class="tab-new-circle">
-				<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-			</span>
-			<span class="tab-label">{m.nav_new_thesis()}</span>
-		</button>
-
-		<a href="/my" class="tab-item" class:active={isActive('/my')} onclick={closeAllPopovers}>
-			<svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-			<span class="tab-label">{m.nav_my_theses()}</span>
-		</a>
-	</nav>
+	<div class="content">
+		{#if bannerStore.visible}
+			<div class="site-banner" role="status">
+				<span class="site-banner-text">{bannerStore.text}</span>
+				<button
+					type="button"
+					class="site-banner-dismiss"
+					onclick={() => bannerStore.dismiss()}
+					title="Dismiss"
+					aria-label="Dismiss banner"
+				>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+				</button>
+			</div>
+		{/if}
+		<main class="main">
+			{@render children()}
+		</main>
+	</div>
 </div>
 {/if}
 
@@ -488,19 +483,25 @@
 		gap: 0.35rem;
 	}
 
-	.nav-badge {
+	/* Update-count badge — shared base for desktop (.nav-badge) and mobile
+	   (.mobile-nav-badge); the two differ only in placement + size below. */
+	.nav-badge,
+	.mobile-nav-badge {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		min-width: 1.05rem;
-		height: 1.05rem;
-		padding: 0 0.3rem;
 		background: var(--color-primary);
-		color: white;
-		font-size: 0.62rem;
+		color: var(--color-on-primary);
 		font-weight: 700;
 		border-radius: 999px;
 		line-height: 1;
+	}
+
+	.nav-badge {
+		min-width: 1.05rem;
+		height: 1.05rem;
+		padding: 0 0.3rem;
+		font-size: 0.62rem;
 		animation: badge-pulse 2s ease-in-out infinite;
 	}
 
@@ -551,7 +552,7 @@
 	}
 
 	.action-new {
-		color: white;
+		color: var(--color-on-primary);
 		background: var(--color-primary);
 		border-color: var(--color-primary);
 		font-weight: 600;
@@ -560,7 +561,7 @@
 	.action-new:hover {
 		background: var(--color-primary-hover);
 		border-color: var(--color-primary-hover);
-		color: white;
+		color: var(--color-on-primary);
 	}
 
 	.budget-pill {
@@ -871,6 +872,14 @@
 	}
 	.budget-event-label:hover { color: var(--color-primary); }
 
+	/* ---- Content wrapper (banner + main) ---- */
+	.content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
 	/* ---- Main content: centred editorial column ---- */
 	.main {
 		flex: 1;
@@ -879,11 +888,6 @@
 		margin: 0 auto;
 		padding: 2.5rem 1.5rem 4rem;
 		min-width: 0;
-	}
-
-	/* ---- Bottom tab bar (mobile only, hidden on desktop) ---- */
-	.bottom-tab-bar {
-		display: none;
 	}
 
 	/* ---- Site banner (admin-configurable) ---- */
@@ -926,46 +930,133 @@
 		background: rgba(0, 0, 0, 0.06);
 	}
 
+	/* Mobile-only top nav (hidden on desktop) */
+	.mobile-topnav {
+		display: none;
+	}
+
 	/* ---- Responsive ---- */
 	@media (max-width: 768px) {
+		/* position: relative anchors the absolutely-centred + bubble;
+		   overflow: visible lets the bubble overshoot the bar's bottom edge. */
 		.topbar-inner {
-			padding: 0.6rem 1rem;
-			gap: 0.75rem;
+			padding: 0.3rem 0.85rem;
+			gap: 0.5rem;
+			position: relative;
+			overflow: visible;
 		}
 		.brand-name { display: none; }
-		/* Primary nav moves to the bottom tab bar on mobile. */
+		/* Desktop nav hidden on mobile — replaced by mobile-topnav inline */
 		.topnav { display: none; }
-		/* Hide the desktop trigger buttons but keep the wrapper visible — the
-		   overflow menu re-triggers the same popovers, and the popovers are
-		   position: fixed bottom-sheets that must still mount to be shown. */
+		/* Mobile nav — exact thirds, independent of brand/actions widths.
+		   The bar is divided into sixths (Fibonacci-friendly): brand sits far
+		   left, "..." far right, and the three primary targets land on the
+		   1/3 · 1/2 · 2/3 gridlines. Feed and Mine are absolutely positioned on
+		   those lines (like the + bubble is on 1/2), so their spacing is exact
+		   regardless of how wide the flanking brand/actions happen to be. */
+		.brand { flex: 1; }
+		.actions { flex: 1; justify-content: flex-end; }
+		.mobile-topnav {
+			display: block;
+		}
+		.mobile-topnav-item {
+			position: absolute;
+			top: 50%;
+			transform: translate(-50%, -50%);
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 0.15rem;
+			padding: 0.35rem 0.5rem;
+			color: var(--color-text-muted);
+			text-decoration: none;
+			background: transparent;
+			border: none;
+			font-family: inherit;
+			cursor: pointer;
+			transition: color var(--transition-fast);
+			z-index: 2;
+		}
+		/* Feed at 1/3, Mine at 2/3; + bubble is centred on 1/2 (below). */
+		.mobile-topnav-item.nav-feed { left: 33.3333%; }
+		.mobile-topnav-item.nav-mine { left: 66.6667%; }
+		.mobile-topnav-item.active { color: var(--color-primary); }
+		.mobile-topnav-label {
+			font-size: 0.6rem;
+			font-weight: 500;
+			white-space: nowrap;
+			line-height: 1;
+		}
+		.mobile-nav-badge {
+			position: absolute;
+			top: 0.2rem;
+			left: calc(50% + 0.4rem);
+			min-width: 0.95rem;
+			height: 0.95rem;
+			padding: 0 0.2rem;
+			font-size: 0.55rem;
+		}
+		/* The + bubble — absolutely centred to the bar, overshoots downward.
+		   No label: a pure raised action button, app-style. */
+		.mobile-new-bubble {
+			position: absolute;
+			left: 50%;
+			top: 50%;
+			transform: translate(-50%, -30%);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 3.4rem;
+			height: 3.4rem;
+			border-radius: 50%;
+			background: var(--color-primary);
+			color: var(--color-on-primary);
+			box-shadow: var(--shadow-primary);
+			border: none;
+			cursor: pointer;
+			z-index: 1;
+			transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+		}
+		.mobile-new-bubble:hover,
+		.mobile-new-bubble:active {
+			transform: translate(-50%, -30%) scale(1.08);
+			box-shadow: 0 6px 18px color-mix(in srgb, var(--color-primary) 60%, transparent);
+		}
+
+		/* Hide desktop-only elements */
 		.secondary-action > .action-btn { display: none; }
 		.menu-item-mobile { display: block; }
 		.action-new-label { display: none; }
 		.action-new { display: none; }
-		.actions { margin-left: auto; }
-		/* Fix topbar: sticky breaks when browser chrome resizes on scroll.
-		   Use fixed instead and compensate with padding-top on main. */
+		/* Topbar on mobile: fixed instead of sticky (browser chrome resizes on
+		   scroll and breaks sticky); backdrop-filter off (a filtered fixed
+		   element becomes a containing block, trapping fixed children);
+		   overflow visible so the + bubble can overshoot the bottom edge. */
 		.topbar {
 			position: fixed;
 			top: 0;
 			left: 0;
 			right: 0;
+			overflow: visible;
+			backdrop-filter: none;
+			-webkit-backdrop-filter: none;
+			background: var(--color-surface);
 		}
-		.main { padding: 4.5rem 1rem 5.5rem; }
-		/* Kill backdrop-filter when a popover is open so position:fixed
-		   escapes to viewport (backdrop-filter creates a containing block). */
+		/* Offset the whole content column (banner + main) below the fixed
+		   topbar, so the banner isn't hidden behind it. */
+		.content { padding-top: 2.9rem; }
+		.main { padding: 1.1rem 1rem 2rem; }
+		/* Kill backdrop-filter when a popover is open */
 		.topbar.popover-active {
 			backdrop-filter: none;
 			-webkit-backdrop-filter: none;
 		}
-		/* On mobile the backdrop dims: makes clear the popover is modal and
-		   the rest of the page is inactive. */
+		/* Dimmed backdrop for mobile popovers */
 		.popover-backdrop {
 			background: rgba(0, 0, 0, 0.4);
 		}
-		/* Slider / theme / budget are centred modal cards with a real border
-		   and safe-area padding — no more bottom sheet with a barely-visible
-		   edge. Slightly larger font so the labels read on a phone. */
+		/* Centred modal cards for slider/theme/budget */
 		.popover {
 			position: fixed;
 			top: 50dvh;
@@ -988,11 +1079,7 @@
 			font-size: var(--text-base, 1rem);
 		}
 
-		/* The overflow menu becomes a right-anchored full-height drawer.
-		   Rationale: it holds the primary nav on mobile — a bottom-sheet
-		   made it feel like a transient popover and cramped the labels; a
-		   drawer with larger tap targets reads like the desktop nav folded
-		   sideways, which is what the user asked for. */
+		/* Overflow menu → right-anchored full-height drawer */
 		.pop-menu {
 			position: fixed;
 			inset: 0 0 0 auto;
@@ -1000,7 +1087,7 @@
 			left: auto;
 			right: 0;
 			top: 0;
-			transform: none; /* the shared .popover rule centres via translate; drawer wants none */
+			transform: none;
 			width: min(88vw, 20rem);
 			max-height: 100dvh;
 			height: 100dvh;
@@ -1031,86 +1118,6 @@
 		}
 		.pop-menu .menu-divider {
 			margin: 0.5rem 0;
-		}
-
-		/* Bottom tab bar */
-		.bottom-tab-bar {
-			display: flex;
-			position: fixed;
-			bottom: 0;
-			left: 0;
-			right: 0;
-			z-index: 101;
-			background: var(--color-surface);
-			border-top: 1px solid var(--color-border);
-			padding-bottom: env(safe-area-inset-bottom, 0);
-		}
-
-		.tab-item {
-			flex: 1;
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			gap: 0.2rem;
-			padding: 0.55rem 0.5rem;
-			position: relative;
-			color: var(--color-text-muted);
-			text-decoration: none;
-			background: transparent;
-			border: none;
-			font-family: inherit;
-			cursor: pointer;
-			transition: color var(--transition-fast);
-		}
-
-		.tab-item.active {
-			color: var(--color-primary);
-		}
-
-		.tab-icon {
-			flex-shrink: 0;
-		}
-
-		.tab-label {
-			font-size: 0.65rem;
-			font-weight: 500;
-			white-space: nowrap;
-			line-height: 1;
-		}
-
-		.tab-badge {
-			position: absolute;
-			top: 0.35rem;
-			left: calc(50% + 0.5rem);
-			min-width: 1rem;
-			height: 1rem;
-			padding: 0 0.25rem;
-			background: var(--color-primary);
-			color: white;
-			font-size: 0.58rem;
-			font-weight: 700;
-			border-radius: 999px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			line-height: 1;
-		}
-
-		.tab-new-circle {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			width: 2.4rem;
-			height: 2.4rem;
-			border-radius: 50%;
-			background: var(--color-primary);
-			color: white;
-			margin-bottom: 0.05rem;
-		}
-
-		.tab-new {
-			color: var(--color-text-muted);
 		}
 	}
 </style>

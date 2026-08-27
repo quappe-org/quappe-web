@@ -9,14 +9,26 @@
 	import { budgetStore } from '$lib/stores/budget.svelte';
 	import { m } from '$lib/paraglide/messages';
 
-	let { argument, leading = false, variants = [], onFork, onEdit, onNeedThesisVote }: {
+	let { argument, leading = false, variants = [], hasThesisVote = true, onFork, onEdit, onNeedThesisVote }: {
 		argument: Argument;          // group root
 		leading?: boolean;
 		variants?: Argument[];       // forks (descendants) of the root
+		hasThesisVote?: boolean;     // viewer has voted on the thesis (gates fork/edit)
 		onFork?: (arg: Argument) => void;
 		onEdit?: (arg: Argument) => void;
 		onNeedThesisVote?: () => void; // fired when server gates on a missing thesis vote
 	} = $props();
+
+	// Fork/edit create arguments, which the server gates behind a thesis vote.
+	// Without one, nudge the user to vote instead of opening a form that 403s.
+	function requestFork() {
+		if (hasThesisVote) onFork?.(active);
+		else onNeedThesisVote?.();
+	}
+	function requestEdit() {
+		if (hasThesisVote) onEdit?.(active);
+		else onNeedThesisVote?.();
+	}
 
 	function supportVotes(a: Argument): number {
 		return a.votes.reduce((s, v) => s + (v.type === 'support' ? v.weight : 0), 0);
@@ -305,12 +317,12 @@
 		/>
 		<div class="argument-actions">
 			{#if isAuthor && onEdit}
-				<button class="icon-btn" title="Edit your argument" onclick={() => onEdit?.(active)}>
+				<button class="icon-btn" class:locked={!hasThesisVote} title={hasThesisVote ? 'Edit your argument' : m.thesis_vote_first_hint()} onclick={requestEdit}>
 					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
 				</button>
 			{/if}
 			{#if onFork}
-				<button class="icon-btn" title="Propose a variant of this argument" onclick={() => onFork?.(active)}>
+				<button class="icon-btn" class:locked={!hasThesisVote} title={hasThesisVote ? 'Propose a variant of this argument' : m.thesis_vote_first_hint()} onclick={requestFork}>
 					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 						<circle cx="6" cy="3" r="2"></circle><circle cx="6" cy="21" r="2"></circle><circle cx="18" cy="12" r="2"></circle><path d="M18 10V8a2 2 0 0 0-2-2H8M6 5v14"></path>
 					</svg>
@@ -643,5 +655,10 @@
 		color: var(--color-primary);
 		border-color: var(--color-primary);
 		background: var(--color-primary-bg);
+	}
+
+	/* Locked = no thesis vote yet. Still clickable (nudges to vote), just dimmed. */
+	.icon-btn.locked {
+		opacity: 0.55;
 	}
 </style>

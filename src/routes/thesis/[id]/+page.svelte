@@ -12,6 +12,7 @@
 	import ActivityGraph from '$lib/components/ActivityGraph.svelte';
 	import ArgumentForm from '$lib/components/ArgumentForm.svelte';
 	import ArgumentColumns from '$lib/components/ArgumentColumns.svelte';
+	import Popup from '$lib/components/Popup.svelte';
 	import type { ActivityDay } from '$lib/models/contract';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
@@ -270,6 +271,10 @@
 	let currentWeight = $state(1);
 	let hasVotedLocally = $state(false);
 
+	// Any thesis vote (support/reject/neutral) unlocks contributing arguments —
+	// mirrors the server-side thesis_vote_required gate on argument create/fork.
+	let hasThesisVote = $derived(currentVote !== null);
+
 	$effect(() => {
 		if (typeof window === 'undefined' || !thesis || hasVotedLocally) return;
 		const userId = getUserId();
@@ -278,13 +283,17 @@
 		currentWeight = existing?.weight ?? 1;
 	});
 
+	// Centred, auto-dismissing nudge shown when an action needs a thesis vote
+	// first (styled like the header modal cards). Brief but readable, then fades.
 	let needThesisVoteHint = $state(false);
+	let voteHintTimer: ReturnType<typeof setTimeout> | undefined;
 	function nudgeThesisVote() {
 		needThesisVoteHint = true;
 		if (typeof document !== 'undefined') {
 			document.querySelector('.thesis-tile')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 		}
-		setTimeout(() => { needThesisVoteHint = false; }, 5000);
+		clearTimeout(voteHintTimer);
+		voteHintTimer = setTimeout(() => { needThesisVoteHint = false; }, 1800);
 	}
 
 	async function castThesisVote(type: VoteType, weight: number) {
@@ -318,22 +327,25 @@
 	}
 
 	// --- Argument form ---
+	// Opened declaratively via `argIntent`: setting it (and flipping showArgForm)
+	// mounts the form already in the right mode. Driving it through a bound ref
+	// was racy — the ref was still null in the tick the form was opened.
 	let showArgForm = $state(false);
-	let argFormRef = $state<ReturnType<typeof import('$lib/components/ArgumentForm.svelte')['default']> | null>(null);
+	let argIntent = $state<import('$lib/components/ArgumentForm.svelte').ArgFormIntent>({ mode: 'new' });
 
 	function openNewArg() {
+		argIntent = { mode: 'new' };
 		showArgForm = true;
-		argFormRef?.openNew();
 	}
 
 	function openFork(source: Argument) {
+		argIntent = { mode: 'fork', source };
 		showArgForm = true;
-		argFormRef?.openFork(source);
 	}
 
 	function openEdit(target: Argument) {
+		argIntent = { mode: 'edit', source: target };
 		showArgForm = true;
-		argFormRef?.openEdit(target);
 	}
 
 	function onArgSubmitted(arg: Argument, mode: string) {
@@ -555,9 +567,6 @@
 				{/if}
 
 				<div class="thesis-tile-footer">
-					{#if needThesisVoteHint}
-						<p class="thesis-vote-hint">{m.thesis_vote_first_hint()}</p>
-					{/if}
 					{#if voteSummary}
 						<VoteRow
 							summary={voteSummary}
@@ -587,8 +596,8 @@
 		<section class="arguments-section">
 			{#if showArgForm}
 				<ArgumentForm
-					bind:this={argFormRef}
 					thesisId={thesis.id}
+					intent={argIntent}
 					onsubmitted={onArgSubmitted}
 					oncancel={() => { showArgForm = false; }}
 					onneedthesisvote={nudgeThesisVote}
@@ -602,6 +611,7 @@
 				{pendingReorderCount}
 				complexityCapped={argGroups.length > topGroups.length + poolGroups.length}
 				{opinionView}
+				{hasThesisVote}
 				onreorder={recomputeOrder}
 				onopenarg={openNewArg}
 				onfork={openFork}
@@ -664,6 +674,13 @@
 			</section>
 		{/if}
 	</article>
+
+	<Popup open={needThesisVoteHint} variant="modal" cardClass="vote-nudge-card" onclose={() => (needThesisVoteHint = false)}>
+		<span class="vote-nudge-icon" aria-hidden="true">
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"></path><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+		</span>
+		<p class="vote-nudge-text">{m.thesis_vote_first_hint()}</p>
+	</Popup>
 {:else}
 	<div class="not-found">
 		<h1>{m.not_found_thesis_title()}</h1>
@@ -934,15 +951,45 @@
 		flex-wrap: wrap;
 	}
 
-	.thesis-vote-hint {
-		flex-basis: 100%;
-		margin: 0 0 0.25rem;
-		padding: 0.5rem 0.75rem;
-		background: var(--color-primary-bg);
-		color: var(--color-primary);
-		border-radius: var(--radius-sm);
-		font-size: var(--text-sm);
-		font-weight: 500;
+	/* Centred, auto-dismissing "vote on the thesis first" nudge. Matches the
+	   header modal-card shape (surface card, soft border, big shadow, dimmed
+	   backdrop). Accent-tinted so it reads as a prompt, not an error — but in
+	   calm mode it drops to the neutral surface to stay quiet. */
+	/* Vote-first nudge: uses the shared <Popup variant="modal"> shell for the
+	   backdrop + centring; here we only restyle the card as an accent-tinted
+	   prompt (calm mode drops to neutral surface). The 1.8s fade matches the
+	   JS auto-dismiss timer. Card lives inside Popup, so target it globally. */
+	:global(.vote-nudge-card) {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		width: auto !important;
+		max-width: min(92vw, 22rem);
+		background: var(--color-primary) !important;
+		color: var(--color-on-primary);
+		border: none !important;
+		animation: vote-nudge-fade 1.8s ease forwards;
+	}
+	.vote-nudge-icon {
+		display: inline-flex;
+		flex-shrink: 0;
+	}
+	.vote-nudge-text {
+		margin: 0;
+		font-size: var(--text-base);
+		font-weight: 600;
+		line-height: 1.35;
+	}
+	:global([data-calm='true'] .vote-nudge-card) {
+		background: var(--color-surface) !important;
+		color: var(--color-text);
+		border: 1px solid var(--color-border) !important;
+	}
+	@keyframes vote-nudge-fade {
+		0% { opacity: 0; }
+		12% { opacity: 1; }
+		80% { opacity: 1; }
+		100% { opacity: 0; }
 	}
 
 	.thesis-admin-row {
