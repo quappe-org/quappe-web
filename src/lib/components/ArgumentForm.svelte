@@ -34,11 +34,19 @@
 	);
 	let editingId = $derived(intent.mode === 'edit' ? intent.source?.id : undefined);
 
-	// Content is seeded from the intent, then user-editable. Re-seeds whenever
-	// a new intent arrives (opening fork/edit prefills; opening new clears).
+	// The merged fork body (original + "\n\n" + addition) must fit the 800-char
+	// argument cap, so the addition's own budget is what's left after the frozen
+	// original and the two-char separator. Floored at 1 so maxlength stays valid.
+	const ARG_MAX = 800;
+	let forkAdditionMax = $derived(Math.max(1, ARG_MAX - (sourceContent?.trim().length ?? 0) - 2));
+
+	// Content is seeded from the intent, then user-editable — EXCEPT for forks:
+	// a fork keeps the original verbatim and the user only writes an addition
+	// (merged on submit). So in fork mode `content` starts empty and holds only
+	// the extension; in new/edit it holds the full editable body as before.
 	let content = $state('');
 	$effect(() => {
-		content = intent.mode === 'new' ? '' : (intent.source?.content ?? '');
+		content = intent.mode === 'edit' ? (intent.source?.content ?? '') : '';
 	});
 
 	let submitting = $state(false);
@@ -96,12 +104,18 @@
 		}
 		budgetStore.spendArgument();
 		try {
+			// Forks keep the original verbatim and append the user's addition, so
+			// the parent text is never lost or silently rewritten. new = plain body.
+			const body =
+				mode === 'fork' && sourceContent
+					? `${sourceContent.trim()}\n\n${content.trim()}`
+					: content.trim();
 			const res = await fetch('/api/arguments', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					thesis_id: thesisId,
-					content: content.trim(),
+					content: body,
 					forked_from_id: forkedFromId,
 					author_id: getUserId()
 				})
@@ -130,16 +144,31 @@
 	</h3>
 
 	{#if mode === 'fork' && sourceContent}
-		<blockquote class="fork-source">{sourceContent}</blockquote>
+		<div class="fork-source-wrap">
+			<span class="fork-source-label">{m.argform_fork_original_label()}</span>
+			<blockquote class="fork-source">{sourceContent}</blockquote>
+		</div>
 	{/if}
 
 	<div class="form-group">
-		<label for="arg-content">{m.argform_content_label()} <span class="hint-inline">{m.argform_content_hint()}</span></label>
-		<textarea id="arg-content" bind:value={content} placeholder={m.argform_content_placeholder()} maxlength="800" required></textarea>
+		{#if mode === 'fork'}
+			<div class="label-row">
+				<label for="arg-content">{m.argform_fork_addition_label()} <span class="hint-inline">{m.argform_fork_addition_hint()}</span></label>
+				<span class="char-counter" class:near-limit={content.length > forkAdditionMax - 120}>{content.length}/{forkAdditionMax}</span>
+			</div>
+			<textarea id="arg-content" bind:value={content} placeholder={m.argform_fork_addition_placeholder()} maxlength={forkAdditionMax} required></textarea>
+		{:else}
+			<div class="label-row">
+				<label for="arg-content">{m.argform_content_label()} <span class="hint-inline">{m.argform_content_hint()}</span></label>
+				<span class="char-counter" class:near-limit={content.length > 680}>{content.length}/800</span>
+			</div>
+			<textarea id="arg-content" bind:value={content} placeholder={m.argform_content_placeholder()} maxlength="800" required></textarea>
+		{/if}
 	</div>
 
 	<div class="form-actions">
-		<button class="btn btn-primary" type="submit" disabled={submitting}>
+		<button class="btn btn-primary" type="submit" disabled={submitting || !content.trim()} aria-busy={submitting}>
+			{#if submitting}<span class="btn-spinner" aria-hidden="true"></span>{/if}
 			{#if submitting}{m.argform_submitting()}{:else if mode === 'edit'}{m.argform_submit_edit()}{:else if mode === 'fork'}{m.argform_submit_fork()}{:else}{m.argform_submit_new()}{/if}
 		</button>
 		<button class="btn" type="button" onclick={cancel}>{m.argform_cancel()}</button>
@@ -160,6 +189,20 @@
 	.form-title {
 		font-size: var(--text-base);
 		font-weight: 600;
+	}
+
+	.fork-source-wrap {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+
+	.fork-source-label {
+		font-size: var(--text-xs);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--color-text-light);
 	}
 
 	.fork-source {
@@ -188,9 +231,43 @@
 		gap: 0.25rem;
 	}
 
+	.label-row {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
+	.char-counter {
+		font-size: var(--text-xs);
+		font-family: var(--font-mono);
+		color: var(--color-text-light);
+		flex-shrink: 0;
+	}
+
+	.char-counter.near-limit {
+		color: var(--color-reject);
+		font-weight: 600;
+	}
+
 	.form-actions {
 		display: flex;
 		gap: 0.5rem;
+	}
+
+	.btn-spinner {
+		display: inline-block;
+		width: 0.85rem;
+		height: 0.85rem;
+		border: 2px solid rgba(255, 255, 255, 0.4);
+		border-top-color: #fff;
+		border-radius: 50%;
+		animation: spin 0.6s linear infinite;
+		flex-shrink: 0;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 
 	.arg-error {

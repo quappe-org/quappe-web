@@ -369,7 +369,7 @@
 		background: none;
 		border: none;
 		cursor: pointer;
-		color: #059669;
+		color: var(--color-variant);
 		font-size: 0.7rem;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -465,18 +465,18 @@
 	}
 
 	.variant-option:hover {
-		border-color: var(--color-support);
+		border-color: var(--color-variant);
 	}
 
 	.variant-option-active {
-		border-color: var(--color-support);
-		background: var(--color-support-bg);
+		border-color: var(--color-variant);
+		background: var(--color-variant-bg);
 	}
 
 	.variant-option input {
 		margin-top: 0.15rem;
 		flex-shrink: 0;
-		accent-color: var(--color-support);
+		accent-color: var(--color-variant);
 	}
 
 	.variant-option-body {
@@ -504,8 +504,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: #059669;
-		background: #ecfdf5;
+		color: var(--color-variant);
+		background: var(--color-variant-bg);
 		padding: 0.05rem 0.3rem;
 		border-radius: var(--radius-sm);
 	}
@@ -585,9 +585,9 @@
 		padding: 0.05rem 0.5rem;
 		font-size: 0.7rem;
 		border-radius: 9999px;
-		background: #ecfeff;
-		color: #0e7490;
-		border: 1px solid #a5f3fc;
+		background: var(--color-hashtag-bg);
+		color: var(--color-hashtag);
+		border: 1px solid var(--color-hashtag-border);
 	}
 
 	.sources {

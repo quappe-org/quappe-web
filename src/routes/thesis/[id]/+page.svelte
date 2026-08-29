@@ -10,6 +10,7 @@
 	import VoteRow from '$lib/components/VoteRow.svelte';
 	import SwipeVote from '$lib/components/SwipeVote.svelte';
 	import ActivityGraph from '$lib/components/ActivityGraph.svelte';
+	import LifecycleIcon from '$lib/components/LifecycleIcon.svelte';
 	import ArgumentForm from '$lib/components/ArgumentForm.svelte';
 	import ArgumentColumns from '$lib/components/ArgumentColumns.svelte';
 	import Popup from '$lib/components/Popup.svelte';
@@ -467,25 +468,17 @@
 
 		<!-- Thesis tile -->
 		<SwipeVote oncast={castThesisVote}>
-		<div class="thesis-tile card heat-{heat} lifecycle-band-{thesis.lifecycle?.state ?? 'seedling'}">
-			<span
-				class="side-band heat-band"
-				title="Heat: {heat} (recent activity {heatRatio.toFixed(2)}× baseline) — click for details"
-				role="button"
-				tabindex="0"
-				aria-label="Heat: {heat} — open explanation"
-				onclick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = '/about/heat'; }}
-				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); window.location.href = '/about/heat'; } }}
-			></span>
-			<span
-				class="side-band lifecycle-band-strip"
-				title="Lifecycle: {thesis.lifecycle?.state ?? 'seedling'} — click for details"
-				role="button"
-				tabindex="0"
-				aria-label="Lifecycle: {thesis.lifecycle?.state ?? 'seedling'} — open explanation"
-				onclick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = '/about/lifecycle'; }}
-				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); window.location.href = '/about/lifecycle'; } }}
-			></span>
+		<div class="thesis-tile card heat-{heat}">
+			<div class="thesis-eyebrow">
+				<a class="eyebrow-state" href="/about/lifecycle" title="Lifecycle: {thesis.lifecycle?.state ?? 'seedling'} — open explanation">
+					<LifecycleIcon state={thesis.lifecycle?.state ?? 'seedling'} />
+					{thesis.lifecycle?.state ?? 'seedling'}
+				</a>
+				<span class="eyebrow-sep">·</span>
+				<a class="eyebrow-heat" href="/about/heat" title="Heat: {heat} (recent activity {heatRatio.toFixed(2)}× baseline) — open explanation">
+					{m.thesis_heat_label({ heat })}
+				</a>
+			</div>
 			{#if editingThesis}
 				<form class="edit-form" onsubmit={(e) => { e.preventDefault(); submitEditThesis(); }}>
 					<div class="form-group">
@@ -726,42 +719,44 @@
 		border-radius: var(--radius-lg);
 		padding: 1.5rem;
 		position: relative;
-		padding-left: calc(1.5rem + 16px);
 		overflow: hidden;
 	}
 
-	.side-band {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		width: 8px;
-		background: var(--color-border);
-		transition: filter var(--transition-fast);
-	}
-	.heat-band {
-		left: 0;
-		cursor: pointer;
-	}
-	.lifecycle-band-strip {
-		left: 8px;
-		cursor: pointer;
-	}
-	.heat-band:hover,
-	.lifecycle-band-strip:hover {
-		filter: brightness(0.85);
-	}
+	/* Heat as a soft glow (matches the feed card): one colour = theme accent,
+	   intensity = heat. Even cold shows a faint glow. Hidden in calm (app.css). */
+	.thesis-tile.heat-cold { --heat-glow: 0 0 8px -3px color-mix(in srgb, var(--color-primary) 25%, transparent); }
+	.thesis-tile.heat-cool { --heat-glow: 0 0 12px -3px color-mix(in srgb, var(--color-primary) 40%, transparent); }
+	.thesis-tile.heat-warm { --heat-glow: 0 0 18px -3px color-mix(in srgb, var(--color-primary) 60%, transparent); }
+	.thesis-tile.heat-hot  { --heat-glow: 0 0 26px -2px color-mix(in srgb, var(--color-primary) 80%, transparent); }
+	.thesis-tile[class*='heat-'] { box-shadow: var(--heat-glow); }
 
-	.thesis-tile.heat-hot  .heat-band { background: #ea580c; }
-	.thesis-tile.heat-warm .heat-band { background: #f59e0b; }
-	.thesis-tile.heat-cool .heat-band { background: #93c5fd; }
-	.thesis-tile.heat-cold .heat-band { background: #3b82f6; }
-
-	.thesis-tile.lifecycle-band-seedling     .lifecycle-band-strip { background: #bef264; }
-	.thesis-tile.lifecycle-band-discussed    .lifecycle-band-strip { background: #93c5fd; }
-	.thesis-tile.lifecycle-band-contested    .lifecycle-band-strip { background: #fbbf24; }
-	.thesis-tile.lifecycle-band-crystallized .lifecycle-band-strip { background: #67e8f9; }
-	.thesis-tile.lifecycle-band-faded        .lifecycle-band-strip { background: #d4d4d8; }
-	.thesis-tile.lifecycle-band-dormant      .lifecycle-band-strip { background: #a1a1aa; }
+	/* Editorial eyebrow: lifecycle (icon + word) · heat, both linking to their
+	   explainer pages. Mirrors the feed card's eyebrow. */
+	.thesis-eyebrow {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--color-text-light);
+	}
+	.thesis-eyebrow .eyebrow-state,
+	.thesis-eyebrow .eyebrow-heat {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		color: inherit;
+		text-decoration: none;
+	}
+	.thesis-eyebrow .eyebrow-state:hover,
+	.thesis-eyebrow .eyebrow-heat:hover {
+		color: var(--color-primary);
+	}
+	.thesis-eyebrow .eyebrow-sep {
+		opacity: 0.5;
+	}
 
 	.badge-arguments {
 		display: inline-flex;

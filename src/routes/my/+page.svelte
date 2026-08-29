@@ -26,11 +26,19 @@
 	});
 
 	// A thesis paired with the timestamp that places it on my timeline:
-	// authored → creation time; voted → the time I cast my vote.
+	// authored → creation time; voted → the thesis's last-update time (server-set,
+	// bumped on every vote incl. weight changes).
 	interface TimelineEntry {
 		thesis: Thesis;
-		at: string; // ISO
+		at: string; // ISO — used only for the time-band grouping, not for ordering
 	}
+
+	// Ordering is FROZEN at load time (see the $effect below), so re-weighting a
+	// vote — which rewrites thesis.votes client-side — never re-sorts the list and
+	// makes tiles jump. The frozen rank is computed server-side by updated_at;
+	// the live list only reloads on navigation.
+	let frozenVotedRank = $state<Map<string, number>>(new Map());
+	let frozenAuthoredRank = $state<Map<string, number>>(new Map());
 
 	let authoredEntries = $derived.by<TimelineEntry[]>(() => {
 		if (typeof window === 'undefined') return [];
@@ -39,8 +47,9 @@
 		if (!userId) return [];
 		return allTheses
 			.filter((t) => t.meta.author_id === userId)
+			.filter((t) => frozenAuthoredRank.has(t.id))
 			.map((t) => ({ thesis: t, at: t.meta.created_at }))
-			.sort((a, b) => (a.at < b.at ? 1 : -1));
+			.sort((a, b) => (frozenAuthoredRank.get(a.thesis.id) ?? 0) - (frozenAuthoredRank.get(b.thesis.id) ?? 0));
 	});
 
 	let votedEntries = $derived.by<TimelineEntry[]>(() => {
@@ -51,13 +60,13 @@
 		const out: TimelineEntry[] = [];
 		for (const t of allTheses) {
 			if (t.meta.author_id === userId) continue;
-			// Use the frozen set so the card stays visible even after a weight-change
-			// (which rewrites thesis.votes and could otherwise drop the entry).
-			if (!frozenVotedIds.has(t.id)) continue;
+			// Frozen rank keeps the card visible AND positioned even after a
+			// weight-change rewrites thesis.votes.
+			if (!frozenVotedRank.has(t.id)) continue;
 			const mine = t.votes.find((v) => v.user_id === userId);
-			out.push({ thesis: t, at: mine?.cast_at || t.meta.created_at });
+			out.push({ thesis: t, at: mine?.cast_at || t.meta.updated_at || t.meta.created_at });
 		}
-		return out.sort((a, b) => (a.at < b.at ? 1 : -1));
+		return out.sort((a, b) => (frozenVotedRank.get(a.thesis.id) ?? 0) - (frozenVotedRank.get(b.thesis.id) ?? 0));
 	});
 
 	// ---- Load-more paging (skips empty periods naturally) ----
@@ -65,19 +74,30 @@
 	let authoredShown = $state(PAGE);
 	let votedShown = $state(PAGE);
 
-	// Freeze the voted-entries list at load time. On this page a vote-weight
-	// change must NOT remove the card from the list (it would disappear mid-
-	// interaction). We only refresh when data reloads (navigation).
-	let frozenVotedIds = $state<Set<string>>(new Set());
+	// Freeze BOTH lists' order at load time. Re-weighting a vote rewrites
+	// thesis.votes locally; without a frozen rank the derived lists would re-sort
+	// and tiles would jump. We recompute the rank only when the SERVER data
+	// changes (navigation/reload) — reading data.theses, not the locally-mutated
+	// allTheses — sorting newest-first by the server's updated_at (bumped on every
+	// vote, incl. weight changes) with created_at as a tiebreak/fallback.
 	$effect(() => {
-		// Re-seed whenever the server data changes (navigation).
 		const userId = getUserId();
-		const ids = new Set<string>();
-		for (const t of allTheses) {
-			if (t.meta.author_id === userId) continue;
-			if (t.votes.some((v) => v.user_id === userId)) ids.add(t.id);
-		}
-		frozenVotedIds = ids;
+		const source = data.theses ?? [];
+		const tsOf = (t: Thesis) => Date.parse(t.meta.updated_at) || Date.parse(t.meta.created_at) || 0;
+
+		const voted = source
+			.filter((t) => t.meta.author_id !== userId && t.votes.some((v) => v.user_id === userId))
+			.sort((a, b) => tsOf(b) - tsOf(a));
+		const votedRank = new Map<string, number>();
+		voted.forEach((t, i) => votedRank.set(t.id, i));
+		frozenVotedRank = votedRank;
+
+		const authored = source
+			.filter((t) => t.meta.author_id === userId)
+			.sort((a, b) => (Date.parse(b.meta.created_at) || 0) - (Date.parse(a.meta.created_at) || 0));
+		const authoredRank = new Map<string, number>();
+		authored.forEach((t, i) => authoredRank.set(t.id, i));
+		frozenAuthoredRank = authoredRank;
 	});
 
 	// Per-thesis weight overrides for this session: swipe → step up Fibonacci.

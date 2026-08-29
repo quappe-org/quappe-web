@@ -414,7 +414,7 @@
 			{/if}
 		</div>
 
-		<Popup open={showForm} variant="modal" cardClass="create-thesis-card" backdropClose={false} onclose={() => { showForm = false; }}>
+		<Popup open={showForm} variant="sheet" backdropClose={false} onclose={() => { showForm = false; }}>
 			<CreateThesisForm
 				bind:suggestedCategories
 				bind:suggestedForThesis
@@ -479,12 +479,6 @@
 </section>
 
 <style>
-	/* New-thesis modal: the creation form is far taller/wider than the default
-	   Popup card, so widen it. Lives inside Popup, hence :global. */
-	:global(.create-thesis-card) {
-		width: min(94vw, 34rem);
-	}
-
 	.page {
 		display: flex;
 		flex-direction: column;

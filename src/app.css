@@ -40,6 +40,16 @@ html[data-invert='true'] iframe {
 	--color-primary-bg: #eef2ff;
 	--color-on-primary: #ffffff;
 
+	/* Variant / fork family indicator — uses support-green by default */
+	--color-variant: #059669;
+	--color-variant-bg: #ecfdf5;
+	--color-variant-border: #6ee7b7;
+
+	/* Hashtag chip */
+	--color-hashtag: #0e7490;
+	--color-hashtag-bg: #ecfeff;
+	--color-hashtag-border: #a5f3fc;
+
 	/* Spacing */
 	--space-xs: 0.25rem;
 	--space-sm: 0.5rem;
@@ -103,6 +113,13 @@ html[data-invert='true'] iframe {
 	--color-primary: #8b7bd9;
 	--color-primary-hover: #7566cc;
 	--color-primary-bg: #f2effb;
+
+	--color-variant: #7ab89c;
+	--color-variant-bg: #f0f8f4;
+	--color-variant-border: #cbe6d8;
+	--color-hashtag: #7ab5c4;
+	--color-hashtag-bg: #f0f8fb;
+	--color-hashtag-border: #b8dde8;
 }
 
 /* Theme: 50 shades of gray — desaturated everything */
@@ -127,6 +144,13 @@ html[data-invert='true'] iframe {
 	--color-primary: #2b2b2b;
 	--color-primary-hover: #1a1a1a;
 	--color-primary-bg: #eaeaea;
+
+	--color-variant: #3d3d3d;
+	--color-variant-bg: #ececec;
+	--color-variant-border: #cfcfcf;
+	--color-hashtag: #5a5a5a;
+	--color-hashtag-bg: #f0f0f0;
+	--color-hashtag-border: #d4d4d4;
 }
 
 /* In grayscale theme, force accent color spots to gray too */
@@ -157,6 +181,13 @@ html[data-invert='true'] iframe {
 	--color-primary: #705c3b;
 	--color-primary-hover: #5c4a2e;
 	--color-primary-bg: #f0ebe0;
+
+	--color-variant: #4a7c59;
+	--color-variant-bg: #eef3ee;
+	--color-variant-border: #cadbcd;
+	--color-hashtag: #4a6e7c;
+	--color-hashtag-bg: #eef3f5;
+	--color-hashtag-border: #c5d7de;
 }
 
 /* Theme: Unicorn — playful, bright, high-chroma pastels */
@@ -181,6 +212,13 @@ html[data-invert='true'] iframe {
 	--color-primary: #d946ef;
 	--color-primary-hover: #c026d3;
 	--color-primary-bg: #fdf0ff;
+
+	--color-variant: #2dd4bf;
+	--color-variant-bg: #ecfdf9;
+	--color-variant-border: #99f6e4;
+	--color-hashtag: #06b6d4;
+	--color-hashtag-bg: #ecfeff;
+	--color-hashtag-border: #a5f3fc;
 }
 
 /* ---- Accessibility modes (orthogonal to theme) ---- */
@@ -205,13 +243,13 @@ html[data-invert='true'] iframe {
 	transform: none !important;
 	box-shadow: var(--shadow-sm) !important;
 }
-/* Dim the decorative heat / lifecycle side bands (visual noise, not content). */
-[data-calm='true'] .side-band {
-	display: none;
-}
-/* Compensate for removed bands — reduce left padding on thesis cards. */
-[data-calm='true'] .thesis-card {
-	padding-left: 1.5rem;
+/* Calm turns the heat glow OFF entirely (it's decorative activity signal, not
+   content). The lifecycle icon hides itself (see LifecycleIcon.svelte); its
+   state word stays. `!important` because the per-heat rule is equally specific. */
+[data-calm='true'] .thesis-card[class*='heat-'],
+[data-calm='true'] .thesis-card[class*='heat-']:hover,
+[data-calm='true'] .thesis-tile[class*='heat-'] {
+	box-shadow: var(--shadow-sm) !important;
 }
 
 /* High contrast: strengthen text + borders for readability. */
@@ -277,6 +315,21 @@ a {
 
 a:hover {
 	color: var(--color-primary-hover);
+}
+
+/* Keyboard focus indicator — visible only for keyboard/sequential navigation,
+   not for mouse clicks. Replaces the default browser outline globally. */
+:focus-visible {
+	outline: 2px solid var(--color-primary);
+	outline-offset: 2px;
+	border-radius: var(--radius-sm);
+}
+
+/* Inputs already use a box-shadow focus ring — don't double up. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+	outline: none;
 }
 
 /* Layout utilities */
@@ -448,8 +501,9 @@ select:focus {
 }
 
 textarea {
-	resize: vertical;
+	resize: none;
 	min-height: 5rem;
+	overflow-y: hidden;
 }
 
 /* iOS Safari zooms into any focused input whose font-size is < 16px and never

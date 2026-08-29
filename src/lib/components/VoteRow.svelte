@@ -177,6 +177,13 @@
 		border-width: 1.5px;
 	}
 
+	/* WCAG 2.1 / Apple HIG: min 44×44px touch target on mobile */
+	@media (max-width: 768px) {
+		.vb {
+			min-height: 44px;
+		}
+	}
+
 	.vb-label {
 		font-weight: 600;
 	}

@@ -103,6 +103,10 @@ The whole card is a link to /thesis/{id}; clicking marks the group's
 `events[]` is still in the response for `/my/updates` (which is event-grain)
 and for read-tracking round-trips.
 
+**"New" badge** on a new-thesis tile shows ONLY when the thesis is still a
+`seedling` (`lifecycle.state === 'seedling'`) — not for every recently-created
+thesis. Lifecycle state, not an age window, decides what counts as "new".
+
 
 # Feed vote handling — grey out, then fade
 
@@ -158,6 +162,15 @@ Like landing, ordered by quality + support (+ germination boost); includes
 `/my`: theses you created or voted on. `/my/updates`: a chronological feed plus
 a fork-decision carousel at the top (one vote per fork family).
 
+**Order is FROZEN at load time** (both authored and voted lists). On load a
+`$effect` reads the SERVER data (`data.theses`, not the locally-mutated copy)
+and builds a rank map — voted sorted by `meta.updated_at` desc (the server bumps
+it on every vote, incl. weight changes), authored by `created_at` desc. The
+derived lists sort purely by that frozen rank, so re-weighting a vote inline
+(which rewrites `thesis.votes` client-side) never re-sorts and tiles never jump.
+The order only refreshes on navigation/reload. Time-band grouping (Today / This
+week / Month) uses each entry's own timestamp, independent of the frozen rank.
+
 ## Thesis detail (/thesis/[id])
 Serif title (canonical) + translate button beside it · description in the
 slider-bound register with a "Reading: simple/dense" indicator when a variant
@@ -179,7 +192,16 @@ Anonymous ID · role badge · language · complexity bounds · categories mgmt.
 - `Logo.svelte` — `/quappe.png`, sized.
 - `ThesisCard.svelte` — editorial: uppercase eyebrow (category · lifecycle state
   · argument count), serif headline, muted body (register-aware, slider-bound),
-  two slim left bands (heat outer, lifecycle inner, 5px), footer vote row.
+  footer vote row. **Heat = a box-shadow glow whose STRENGTH encodes heat**
+  (cold→hot = wider/stronger glow, single theme-accent colour via `color-mix` on
+  `--color-primary`; "more glow == hotter", never a hue walk). One `--heat-glow`
+  custom prop feeds both base and hover box-shadow so the tile never jumps.
+  **Lifecycle = a small glyph** (`LifecycleIcon.svelte`) rendered inline in the
+  eyebrow next to the state word — no more left side-bands.
+- `LifecycleIcon.svelte` — one small SVG glyph per lifecycle state (seedling
+  sprout · discussed chat-bubbles · contested opposing-arrows · crystallized
+  diamond · faded dashed-circle · dormant moon). `currentColor` + `aria-hidden`;
+  the adjacent state word is the accessible label. Self-hides in calm mode.
 - `ArgumentCard.svelte` — represents a fork family. Content, evidence badge +
   source chips (derived from URLs; users never pick evidence type), vote row +
   fork/edit icons, expandable variant picker. One vote per group.
@@ -214,8 +236,10 @@ localStorage, both surfaced in the header theme popover:
    `invert.svelte.ts`) — independent booleans that COMBINE with any theme:
    - `data-invert` — invert all colors (dark-ish; re-inverts raster media).
    - `data-calm` — reduced visual noise: desaturate the surface (`saturate .7`),
-     flatten shadows, remove card hover-lift, dim the decorative heat/lifecycle
-     side bands, stop the badge pulse.
+     flatten shadows, remove card hover-lift, **turn the heat glow OFF entirely**
+     (it's a decorative activity signal, not content — `[class*='heat-']` +
+     `!important` because the per-heat rule is equally specific), hide the
+     lifecycle icon (its state WORD stays), stop the badge pulse.
    - `data-contrast` — stronger text/border contrast, thicker card borders.
    - `data-reduced-motion` — neutralise transitions/animations + instant scroll.
 

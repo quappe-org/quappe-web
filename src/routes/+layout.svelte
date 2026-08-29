@@ -935,6 +935,13 @@
 		display: none;
 	}
 
+	/* Mobile-only + bubble (hidden on desktop — the desktop "+ Neue These"
+	   button in .actions handles creation there). Styled/shown in the media
+	   query below. */
+	.mobile-new-bubble {
+		display: none;
+	}
+
 	/* ---- Responsive ---- */
 	@media (max-width: 768px) {
 		/* position: relative anchors the absolutely-centred + bubble;

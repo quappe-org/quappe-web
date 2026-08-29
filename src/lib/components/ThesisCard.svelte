@@ -6,6 +6,7 @@
 	import { m } from '$lib/paraglide/messages';
 	import VoteRow from '$lib/components/VoteRow.svelte';
 	import SwipeVote from '$lib/components/SwipeVote.svelte';
+	import LifecycleIcon from '$lib/components/LifecycleIcon.svelte';
 	import { budgetStore } from '$lib/stores/budget.svelte';
 	import { complexityStore } from '$lib/stores/complexity.svelte';
 	import { registerForComplexity, pickDescription } from '$lib/models/variants';
@@ -169,32 +170,17 @@
 <SwipeVote oncast={showVoteButtons ? castVote : undefined}>
 	<a
 		href="/thesis/{thesis.id}"
-		class="card thesis-card heat-{heat} lifecycle-band-{thesis.lifecycle?.state ?? 'seedling'}"
+		class="card thesis-card heat-{heat}"
 	>
-	<span
-		class="side-band heat-band"
-		title="Heat: {heat} (recent activity {heatRatio.toFixed(2)}× baseline) — click for details"
-		role="button"
-		tabindex="0"
-		aria-label="Heat: {heat} — open explanation"
-		onclick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = '/about/heat'; }}
-		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); window.location.href = '/about/heat'; } }}
-	></span>
-	<span
-		class="side-band lifecycle-band-strip"
-		title="Lifecycle: {thesis.lifecycle?.state ?? 'seedling'} — click for details"
-		role="button"
-		tabindex="0"
-		aria-label="Lifecycle: {thesis.lifecycle?.state ?? 'seedling'} — open explanation"
-		onclick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = '/about/lifecycle'; }}
-		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); window.location.href = '/about/lifecycle'; } }}
-	></span>
 	<div class="thesis-eyebrow">
 		{#if thesis.categories.length > 0}
 			<span class="eyebrow-cat">{thesis.categories[0]}</span>
 			<span class="eyebrow-sep">·</span>
 		{/if}
-		<span class="eyebrow-state">{thesis.lifecycle?.state ?? 'seedling'}</span>
+		<span class="eyebrow-state">
+			<LifecycleIcon state={thesis.lifecycle?.state ?? 'seedling'} />
+			{thesis.lifecycle?.state ?? 'seedling'}
+		</span>
 		{#if argumentCount > 0}
 			<span class="eyebrow-sep">·</span>
 			<span class="eyebrow-args">{argumentCount} {argumentCount === 1 ? m.card_argument_one() : m.card_argument_many()}</span>
@@ -270,62 +256,42 @@
 	.thesis-card {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 0.75rem;
 		position: relative;
-		padding: 1.5rem 1.5rem 1.5rem calc(1.5rem + 10px);
+		padding: 1.5rem;
 		transition: box-shadow var(--transition-base), transform var(--transition-fast);
 		text-decoration: none;
 		color: inherit;
 		cursor: pointer;
-		min-height: 200px;
 		justify-content: space-between;
 		overflow: hidden;
 	}
 
-	/* Two vertical bands on the left edge: heat (outer) and lifecycle (inner). */
-	.side-band {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		width: 5px;
-		background: var(--color-border);
-	}
-	.heat-band {
-		left: 0;
-		cursor: pointer;
-		transition: filter var(--transition-fast);
-	}
-	.heat-band:hover {
-		filter: brightness(0.85);
-	}
-	.lifecycle-band-strip {
-		left: 5px;
-		cursor: pointer;
-		transition: filter var(--transition-fast);
-	}
-	.lifecycle-band-strip:hover {
-		filter: brightness(0.85);
+	@media (max-width: 768px) {
+		.thesis-card {
+			padding: 1rem;
+			gap: 0.6rem;
+		}
 	}
 
-	/* Heat band */
-	.thesis-card.heat-hot  .heat-band { background: #ea580c; }
-	.thesis-card.heat-warm .heat-band { background: #f59e0b; }
-	.thesis-card.heat-cool .heat-band { background: #93c5fd; }
-	.thesis-card.heat-cold .heat-band { background: #3b82f6; }
-	.thesis-card.heat-hot           { box-shadow: inset 0 0 0 1px rgba(234, 88, 12, 0.12); }
-
-	/* Lifecycle band */
-	.thesis-card.lifecycle-band-seedling     .lifecycle-band-strip { background: #bef264; }
-	.thesis-card.lifecycle-band-discussed    .lifecycle-band-strip { background: #93c5fd; }
-	.thesis-card.lifecycle-band-contested    .lifecycle-band-strip { background: #fbbf24; }
-	.thesis-card.lifecycle-band-crystallized .lifecycle-band-strip { background: #67e8f9; }
-	.thesis-card.lifecycle-band-faded        .lifecycle-band-strip { background: #d4d4d8; }
-	.thesis-card.lifecycle-band-dormant      .lifecycle-band-strip { background: #a1a1aa; }
+	/* Heat as a soft glow instead of a side band. ONE colour (the theme accent),
+	   INTENSITY = heat: more glow == hotter. Uses the palette's own primary so it
+	   never clashes with a theme. Even cold shows a faint glow so no card looks
+	   unfinished. `--heat-glow` is the single source of truth so base + hover
+	   agree; hidden entirely in calm mode (app.css). */
+	.thesis-card.heat-cold { --heat-glow: 0 0 8px -3px color-mix(in srgb, var(--color-primary) 25%, transparent); }
+	.thesis-card.heat-cool { --heat-glow: 0 0 12px -3px color-mix(in srgb, var(--color-primary) 40%, transparent); }
+	.thesis-card.heat-warm { --heat-glow: 0 0 18px -3px color-mix(in srgb, var(--color-primary) 60%, transparent); }
+	.thesis-card.heat-hot  { --heat-glow: 0 0 26px -2px color-mix(in srgb, var(--color-primary) 80%, transparent); }
+	.thesis-card[class*='heat-'] { box-shadow: var(--heat-glow); }
 
 	.thesis-card:hover {
 		box-shadow: var(--shadow-md);
 		transform: translateY(-1px);
 	}
+
+	/* Keep the heat glow on hover, layered under the lift shadow. */
+	.thesis-card[class*='heat-']:hover { box-shadow: var(--shadow-md), var(--heat-glow); }
 
 	.thesis-card:hover .thesis-title {
 		color: var(--color-primary);
@@ -347,6 +313,12 @@
 		color: var(--color-primary);
 	}
 
+	.eyebrow-state {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
 	.eyebrow-sep {
 		opacity: 0.5;
 	}
@@ -360,7 +332,7 @@
 
 	.thesis-title {
 		font-family: var(--font-serif);
-		font-size: 1.35rem;
+		font-size: clamp(1.05rem, 2.8vw, 1.35rem);
 		font-weight: 600;
 		line-height: 1.25;
 		letter-spacing: -0.01em;
@@ -442,11 +414,11 @@
 	.vote-bar {
 		flex: 1;
 		display: flex;
-		height: 5px;
-		border-radius: 3px;
+		height: 7px;
+		border-radius: 4px;
 		overflow: hidden;
 		gap: 1px;
-		background: var(--color-bg);
+		background: var(--color-border);
 	}
 
 	.vb-seg {

@@ -79,7 +79,9 @@
 			{#each group.items as item (item.kind === 'update_group' ? `g:${item.group.thesis_id}` : `t:${item.thesis.id}`)}
 				{#if item.kind === 'new_thesis' && !ignoredNewThesisIds.has(item.thesis.id)}
 					<div class="feed-tile" class:just-voted={justVotedFadingOut.has(item.thesis.id)}>
-						<span class="feed-new-badge">{m.feed_new_thesis_badge()}</span>
+						{#if item.thesis.lifecycle?.state === 'seedling'}
+							<span class="feed-new-badge">{m.feed_new_thesis_badge()}</span>
+						{/if}
 						<ThesisCard
 							thesis={item.thesis}
 							heatRatio={heat[item.thesis.id] ?? 0}
