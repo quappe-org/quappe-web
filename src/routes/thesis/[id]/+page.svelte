@@ -722,12 +722,14 @@
 		overflow: hidden;
 	}
 
-	/* Heat as a soft glow (matches the feed card): one colour = theme accent,
-	   intensity = heat. Even cold shows a faint glow. Hidden in calm (app.css). */
-	.thesis-tile.heat-cold { --heat-glow: 0 0 8px -3px color-mix(in srgb, var(--color-primary) 25%, transparent); }
-	.thesis-tile.heat-cool { --heat-glow: 0 0 12px -3px color-mix(in srgb, var(--color-primary) 40%, transparent); }
-	.thesis-tile.heat-warm { --heat-glow: 0 0 18px -3px color-mix(in srgb, var(--color-primary) 60%, transparent); }
-	.thesis-tile.heat-hot  { --heat-glow: 0 0 26px -2px color-mix(in srgb, var(--color-primary) 80%, transparent); }
+	/* Heat as a soft, colourful glow — reads the shared --color-heat-* theme
+	   variables so the detail tile matches the feed card and the /about legend
+	   exactly. Hotter = larger glow + shift toward the hot colour. Even cold
+	   shows a faint glow. Hidden in calm mode (app.css). */
+	.thesis-tile.heat-cold { --heat-glow: 0 0 10px -3px color-mix(in srgb, var(--color-heat-cold) 50%, transparent); }
+	.thesis-tile.heat-cool { --heat-glow: 0 0 14px -3px color-mix(in srgb, var(--color-heat-cool) 60%, transparent); }
+	.thesis-tile.heat-warm { --heat-glow: 0 0 22px -3px color-mix(in srgb, var(--color-heat-warm) 72%, transparent); }
+	.thesis-tile.heat-hot  { --heat-glow: 0 0 30px -2px color-mix(in srgb, var(--color-heat-hot) 90%, transparent); }
 	.thesis-tile[class*='heat-'] { box-shadow: var(--heat-glow); }
 
 	/* Editorial eyebrow: lifecycle (icon + word) · heat, both linking to their

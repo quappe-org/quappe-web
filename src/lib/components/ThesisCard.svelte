@@ -281,10 +281,10 @@
 	   theme variables). Even cold shows a faint glow so no card looks
 	   unfinished. `--heat-glow` is the single source of truth so base + hover
 	   agree; hidden entirely in calm mode (app.css). */
-	.thesis-card.heat-cold { --heat-glow: 0 0 8px -3px color-mix(in srgb, var(--color-heat-cold) 45%, transparent); }
-	.thesis-card.heat-cool { --heat-glow: 0 0 12px -3px color-mix(in srgb, var(--color-heat-cool) 55%, transparent); }
-	.thesis-card.heat-warm { --heat-glow: 0 0 18px -3px color-mix(in srgb, var(--color-heat-warm) 65%, transparent); }
-	.thesis-card.heat-hot  { --heat-glow: 0 0 26px -2px color-mix(in srgb, var(--color-heat-hot) 80%, transparent); }
+	.thesis-card.heat-cold { --heat-glow: 0 0 10px -3px color-mix(in srgb, var(--color-heat-cold) 50%, transparent); }
+	.thesis-card.heat-cool { --heat-glow: 0 0 14px -3px color-mix(in srgb, var(--color-heat-cool) 60%, transparent); }
+	.thesis-card.heat-warm { --heat-glow: 0 0 22px -3px color-mix(in srgb, var(--color-heat-warm) 72%, transparent); }
+	.thesis-card.heat-hot  { --heat-glow: 0 0 30px -2px color-mix(in srgb, var(--color-heat-hot) 90%, transparent); }
 	.thesis-card[class*='heat-'] { box-shadow: var(--heat-glow); }
 
 	.thesis-card:hover {
