@@ -13,6 +13,11 @@ html[data-invert='true'] svg image,
 html[data-invert='true'] iframe {
 	filter: invert(1) hue-rotate(180deg);
 }
+/* The brand logo is a UI mark, not photographic content — let it invert with
+   the page instead of being re-inverted back like a photo. */
+html[data-invert='true'] img.logo {
+	filter: none;
+}
 
 :root {
 	/* Colors */
