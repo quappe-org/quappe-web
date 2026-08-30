@@ -199,6 +199,8 @@
 	"my_standpoint_regenerate": "Neu generieren",
 	"my_standpoint_server_error": "Server antwortete mit {status}",
 	"my_standpoint_unknown_error": "Unbekannter Fehler",
+	"my_weight_denied_budget": "Zusatzgewicht nicht angewendet — Tagesbudget für Gewicht erreicht. Basis-Stimmen bleiben frei.",
+	"my_weight_denied_new": "Zusatzgewicht noch nicht angewendet — eine ganz neue Identität kann in der ersten Minute nur Basis-Stimmen abgeben.",
 	"my_budget_title": "Dein Tag",
 	"my_budget_sub": "Was du heute vom Budget ausgegeben hast (Limit: {limit} pro Kategorie).",
 	"my_budget_loading": "Wird geladen …",

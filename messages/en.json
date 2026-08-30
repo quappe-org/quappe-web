@@ -199,6 +199,8 @@
 	"my_standpoint_regenerate": "Regenerate",
 	"my_standpoint_server_error": "Server responded {status}",
 	"my_standpoint_unknown_error": "Unknown error",
+	"my_weight_denied_budget": "Extra weight not applied — daily weight budget reached. Base votes stay free.",
+	"my_weight_denied_new": "Extra weight not applied yet — a brand-new identity can only cast base votes for its first minute.",
 	"my_budget_title": "Your day",
 	"my_budget_sub": "What you've spent from today's budget (limit: {limit} per bucket).",
 	"my_budget_loading": "Loading …",

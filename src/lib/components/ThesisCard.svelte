@@ -275,14 +275,16 @@
 	}
 
 	/* Heat as a soft glow instead of a side band. ONE colour (the theme accent),
-	   INTENSITY = heat: more glow == hotter. Uses the palette's own primary so it
-	   never clashes with a theme. Even cold shows a faint glow so no card looks
+	   INTENSITY + HUE = heat: hotter cards glow larger AND shift toward the hot
+	   colour. Each tier draws its own --color-heat-* so the glow is colourful
+	   again and matches the /about heat legend exactly (both read the same
+	   theme variables). Even cold shows a faint glow so no card looks
 	   unfinished. `--heat-glow` is the single source of truth so base + hover
 	   agree; hidden entirely in calm mode (app.css). */
-	.thesis-card.heat-cold { --heat-glow: 0 0 8px -3px color-mix(in srgb, var(--color-primary) 25%, transparent); }
-	.thesis-card.heat-cool { --heat-glow: 0 0 12px -3px color-mix(in srgb, var(--color-primary) 40%, transparent); }
-	.thesis-card.heat-warm { --heat-glow: 0 0 18px -3px color-mix(in srgb, var(--color-primary) 60%, transparent); }
-	.thesis-card.heat-hot  { --heat-glow: 0 0 26px -2px color-mix(in srgb, var(--color-primary) 80%, transparent); }
+	.thesis-card.heat-cold { --heat-glow: 0 0 8px -3px color-mix(in srgb, var(--color-heat-cold) 45%, transparent); }
+	.thesis-card.heat-cool { --heat-glow: 0 0 12px -3px color-mix(in srgb, var(--color-heat-cool) 55%, transparent); }
+	.thesis-card.heat-warm { --heat-glow: 0 0 18px -3px color-mix(in srgb, var(--color-heat-warm) 65%, transparent); }
+	.thesis-card.heat-hot  { --heat-glow: 0 0 26px -2px color-mix(in srgb, var(--color-heat-hot) 80%, transparent); }
 	.thesis-card[class*='heat-'] { box-shadow: var(--heat-glow); }
 
 	.thesis-card:hover {

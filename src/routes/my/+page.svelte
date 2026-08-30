@@ -103,6 +103,17 @@
 	// Per-thesis weight overrides for this session: swipe → step up Fibonacci.
 	let weightOverrides = $state<Map<string, number>>(new Map());
 
+	// Transient feedback when a weight-up swipe is rejected server-side
+	// (daily weight budget reached, or a brand-new identity in its first
+	// minute). Without this the swipe silently does nothing.
+	let swipeNotice = $state<string | null>(null);
+	let swipeNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+	function showSwipeNotice(msg: string) {
+		swipeNotice = msg;
+		if (swipeNoticeTimer) clearTimeout(swipeNoticeTimer);
+		swipeNoticeTimer = setTimeout(() => (swipeNotice = null), 4000);
+	}
+
 	function getCurrentWeight(thesis: Thesis): number {
 		if (weightOverrides.has(thesis.id)) return weightOverrides.get(thesis.id)!;
 		const userId = getUserId();
@@ -137,6 +148,15 @@
 			});
 			if (!res.ok) {
 				if (nextW > 1) budgetStore.refundWeight(nextW);
+				let reason = '';
+				try {
+					reason = ((await res.json()) as { error?: string }).error ?? '';
+				} catch {
+					reason = '';
+				}
+				showSwipeNotice(
+					/new identit/i.test(reason) ? m.my_weight_denied_new() : m.my_weight_denied_budget()
+				);
 				return;
 			}
 			weightOverrides = new Map(weightOverrides).set(thesis.id, nextW);
@@ -346,6 +366,10 @@
 	{#if authoredEntries.length === 0 && votedEntries.length === 0}
 		<p class="empty-state">{m.my_empty_state()}</p>
 	{/if}
+
+	{#if swipeNotice}
+		<div class="swipe-notice" role="status" aria-live="polite">{swipeNotice}</div>
+	{/if}
 </section>
 
 <style>
@@ -532,6 +556,23 @@
 		padding: 0.5rem 0.75rem;
 		color: var(--color-reject);
 		font-size: var(--text-sm);
+	}
+
+	.swipe-notice {
+		position: fixed;
+		left: 50%;
+		bottom: 1.5rem;
+		transform: translateX(-50%);
+		z-index: 50;
+		max-width: min(92vw, 34rem);
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		box-shadow: var(--shadow-md);
+		padding: 0.6rem 0.9rem;
+		color: var(--color-text);
+		font-size: var(--text-sm);
+		text-align: center;
 	}
 
 	.standpoint-hint {

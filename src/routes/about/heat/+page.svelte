@@ -78,8 +78,8 @@
 		border-radius: 2px;
 	}
 
-	.heat-hot-band { background: #ef4444; }
-	.heat-warm-band { background: #f59e0b; }
-	.heat-cool-band { background: #38bdf8; }
-	.heat-cold-band { background: #94a3b8; }
+	.heat-hot-band { background: var(--color-heat-hot); }
+	.heat-warm-band { background: var(--color-heat-warm); }
+	.heat-cool-band { background: var(--color-heat-cool); }
+	.heat-cold-band { background: var(--color-heat-cold); }
 </style>

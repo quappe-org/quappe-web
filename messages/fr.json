@@ -199,6 +199,8 @@
 	"my_standpoint_regenerate": "Régénérer",
 	"my_standpoint_server_error": "Le serveur a répondu {status}",
 	"my_standpoint_unknown_error": "Erreur inconnue",
+	"my_weight_denied_budget": "Poids supplémentaire non appliqué — budget de poids quotidien atteint. Les votes de base restent gratuits.",
+	"my_weight_denied_new": "Poids supplémentaire pas encore appliqué — une identité toute neuve ne peut voter qu'au poids de base pendant sa première minute.",
 	"my_budget_title": "Votre journée",
 	"my_budget_sub": "Ce que vous avez dépensé aujourd'hui (limite : {limit} par catégorie).",
 	"my_budget_loading": "Chargement …",

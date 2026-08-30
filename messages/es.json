@@ -199,6 +199,8 @@
 	"my_standpoint_regenerate": "Regenerar",
 	"my_standpoint_server_error": "El servidor respondió {status}",
 	"my_standpoint_unknown_error": "Error desconocido",
+	"my_weight_denied_budget": "Peso adicional no aplicado — presupuesto diario de peso alcanzado. Los votos base siguen siendo gratis.",
+	"my_weight_denied_new": "Peso adicional aún no aplicado — una identidad recién creada solo puede emitir votos base durante su primer minuto.",
 	"my_budget_title": "Tu día",
 	"my_budget_sub": "Lo que has gastado del presupuesto de hoy (límite: {limit} por categoría).",
 	"my_budget_loading": "Cargando …",
