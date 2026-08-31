@@ -2,9 +2,19 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { LogEntry, LogLevel, LogSource } from '$lib/models/contract';
 	import { adminSecret } from '$lib/stores/admin-secret.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { m } from '$lib/paraglide/messages';
 
 	type TierStats = { hot: number; warm: number; cold: number; total: number };
 	type LogStats = { total: number; buffered: number; capacity: number };
+
+	// Full-page admin gate — mirrors /admin. The log endpoint is already
+	// server-protected by requireAdmin; this closes the UI gap where the page
+	// rendered its (empty) shell to anyone before the secret was verified.
+	let authorized = $state(false);
+	let probing = $state(true);
+	let secretInput = $state('');
+	let gateError = $state<string | null>(null);
 
 	let entries = $state<LogEntry[]>([]);
 	let stats = $state<LogStats>({ total: 0, buffered: 0, capacity: 0 });
@@ -20,6 +30,49 @@
 
 	// Auto-refresh interval id
 	let pollId: ReturnType<typeof setInterval> | null = null;
+
+	// Probe whether the current credentials clear requireAdmin. A cheap
+	// single-entry fetch stands in for the full poll. Records the last status so
+	// the gate distinguishes a wrong secret (403) from a throttled one (429).
+	let lastProbeStatus = $state(0);
+	async function probeAuth(): Promise<boolean> {
+		const res = await fetch('/api/admin/logs?limit=1', { headers: adminSecret.headers() });
+		lastProbeStatus = res.status;
+		return res.ok;
+	}
+
+	async function initGate() {
+		probing = true;
+		if (authStore.role === 'admin' || adminSecret.secret) {
+			authorized = await probeAuth();
+			if (!authorized) adminSecret.clear();
+		}
+		probing = false;
+	}
+
+	onMount(initGate);
+
+	async function submitSecret() {
+		if (!secretInput.trim()) return;
+		gateError = null;
+		adminSecret.set(secretInput);
+		secretInput = '';
+		const ok = await probeAuth();
+		if (ok) {
+			authorized = true;
+		} else {
+			adminSecret.clear();
+			gateError = lastProbeStatus === 429 ? m.error_too_many_requests() : 'Wrong secret. Try again.';
+		}
+	}
+
+	function lock() {
+		adminSecret.clear();
+		authorized = false;
+		if (pollId) clearInterval(pollId);
+		entries = [];
+		lastSeq = 0;
+	}
 
 	async function fetchLogs(replace = false) {
 		if (paused && !replace) return;
@@ -61,12 +114,19 @@
 		fetchLogs(true);
 	}
 
-	// Restart polling whenever filters or interval change
+	// Restart polling whenever filters or interval change — but only once the
+	// admin gate has been cleared.
 	$effect(() => {
+		if (!authorized) return;
+		// Track filter deps so the effect re-runs when they change.
+		levelFilter; sourceFilter; autoRefreshMs;
 		if (pollId) clearInterval(pollId);
 		// Refetch fresh when filters change
 		reset();
 		pollId = setInterval(() => fetchLogs(false), autoRefreshMs);
+		return () => {
+			if (pollId) clearInterval(pollId);
+		};
 	});
 
 	onDestroy(() => {
@@ -100,6 +160,34 @@
 	}
 </script>
 
+{#if !authorized}
+	<section class="admin-gate">
+		<div class="gate-card">
+			<h1 class="gate-title">Admin · Logs</h1>
+			<p class="gate-lead">
+				Enter the operator secret to view the server log stream. Nothing is
+				shown until you're in.
+			</p>
+			{#if probing}
+				<p class="gate-hint">Checking…</p>
+			{:else}
+				<form class="gate-form" onsubmit={(e) => { e.preventDefault(); submitSecret(); }}>
+					<!-- svelte-ignore a11y_autofocus — single-purpose gate; autofocus is expected UX -->
+					<input
+						type="password"
+						bind:value={secretInput}
+						placeholder="Admin secret"
+						class="gate-input"
+						autocomplete="current-password"
+						autofocus
+					/>
+					<button class="btn btn-primary" type="submit" disabled={!secretInput.trim()}>Unlock</button>
+				</form>
+				{#if gateError}<p class="gate-error">{gateError}</p>{/if}
+			{/if}
+		</div>
+	</section>
+{:else}
 <section class="admin-page">
 	<header class="admin-head">
 		<div>
@@ -114,6 +202,7 @@
 			<span class="stat tier"><b>{tiers.hot}</b> hot</span>
 			<span class="stat tier warm"><b>{tiers.warm}</b> warm</span>
 			<span class="stat tier cold"><b>{tiers.cold}</b> cold</span>
+			<button class="btn" onclick={lock}>lock</button>
 		</div>
 	</header>
 
@@ -193,6 +282,7 @@
 		{/if}
 	</div>
 </section>
+{/if}
 
 <style>
 	.admin-page {
@@ -395,4 +485,69 @@
 
 	.row-error { background: rgba(254, 226, 226, 0.4); }
 	.row-warn  { background: rgba(254, 243, 199, 0.35); }
+
+	/* ---- Gate (unauthorized state) — mirrors /admin ---- */
+	.admin-gate {
+		min-height: 60vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1rem;
+	}
+	.gate-card {
+		width: 100%;
+		max-width: 380px;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-xl);
+		box-shadow: var(--shadow-lg);
+		padding: 2rem 1.75rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.gate-title {
+		font-family: var(--font-serif);
+		font-size: 1.5rem;
+		font-weight: 600;
+		margin: 0;
+	}
+	.gate-lead {
+		color: var(--color-text-muted);
+		font-size: var(--text-sm);
+		line-height: 1.5;
+		margin: 0;
+	}
+	.gate-hint {
+		color: var(--color-text-muted);
+		font-size: var(--text-sm);
+		margin: 0;
+	}
+	.gate-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		margin-top: 0.4rem;
+	}
+	.gate-input {
+		width: 100%;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		font-family: inherit;
+		font-size: 16px;
+		background: var(--color-bg);
+		color: var(--color-text);
+	}
+	.gate-error {
+		margin: 0;
+		font-size: var(--text-sm);
+		color: var(--color-reject);
+		font-weight: 500;
+	}
+	.btn-primary {
+		background: var(--color-primary);
+		border-color: var(--color-primary);
+		color: #fff;
+	}
 </style>

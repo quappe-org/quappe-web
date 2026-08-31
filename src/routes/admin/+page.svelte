@@ -27,9 +27,13 @@
 
 	// Probe whether the current credentials (header secret or gated-mode
 	// admin role from the cookie) get us past requireAdmin. This is the sole
-	// gate: everything else on the page is behind `authorized`.
+	// gate: everything else on the page is behind `authorized`. Records the last
+	// HTTP status so the gate can tell "wrong secret" (403) apart from "throttled"
+	// (429) after too many failed attempts.
+	let lastProbeStatus = $state(0);
 	async function probeAuth(): Promise<boolean> {
 		const res = await fetch('/api/admin/users?days=30', { headers: adminSecret.headers() });
+		lastProbeStatus = res.status;
 		if (res.ok) {
 			stats = await res.json();
 			return true;
@@ -73,7 +77,7 @@
 			await loadAdminData();
 		} else {
 			adminSecret.clear();
-			gateError = 'Wrong secret. Try again.';
+			gateError = lastProbeStatus === 429 ? m.error_too_many_requests() : 'Wrong secret. Try again.';
 		}
 	}
 

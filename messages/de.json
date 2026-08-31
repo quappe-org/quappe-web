@@ -226,6 +226,7 @@
 	"complexity_slider_hint": "Komplexitäts-Slider anpassen, um mehr oder weniger zu sehen.",
 	"pulse_page_title": "Community-Puls",
 	"pulse_page_subtitle": "Was die Community bewegt — beobachtet, nicht bewertet.",
+	"pulse_loading": "Community-Puls wird gelesen …",
 	"pulse_server_error": "Server antwortete mit {status}",
 	"pulse_unknown_error": "Unbekannter Fehler",
 	"pulse_llm_unavailable": "LLM nicht verfügbar: {error}",

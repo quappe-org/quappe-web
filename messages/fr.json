@@ -226,6 +226,7 @@
 	"complexity_slider_hint": "Ajustez le curseur de complexité pour en voir plus ou moins.",
 	"pulse_page_title": "Pouls communautaire",
 	"pulse_page_subtitle": "Ce qui anime la communauté — observé, pas jugé.",
+	"pulse_loading": "Lecture du pouls communautaire …",
 	"pulse_server_error": "Le serveur a répondu {status}",
 	"pulse_unknown_error": "Erreur inconnue",
 	"pulse_llm_unavailable": "LLM indisponible : {error}",

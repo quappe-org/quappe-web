@@ -2,6 +2,8 @@
 // an access secret before using the app; anonymous instances (quappe.org) need
 // nothing. Fetched once from /api/auth/status.
 
+import { m } from '$lib/paraglide/messages';
+
 export type AuthMode = 'anonymous' | 'gated';
 export type Role = 'admin' | 'member' | null;
 
@@ -37,7 +39,14 @@ class AuthStore {
 				body: JSON.stringify({ secret })
 			});
 			if (!res.ok) {
-				this.error = res.status === 401 ? 'Invalid secret' : 'Login failed';
+				const body = await res.json().catch(() => ({}));
+				if (res.status === 429 || body?.code === 'rate_limited') {
+					this.error = m.error_too_many_requests();
+				} else if (res.status === 401 || body?.code === 'invalid_secret') {
+					this.error = 'Invalid secret';
+				} else {
+					this.error = m.error_server_generic({ status: res.status });
+				}
 				return false;
 			}
 			const data = await res.json();

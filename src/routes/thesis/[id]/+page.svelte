@@ -728,7 +728,7 @@
 	   shows a faint glow. Hidden in calm mode (app.css). */
 	.thesis-tile.heat-cold { --heat-glow: 0 0 10px -3px color-mix(in srgb, var(--color-heat-cold) 50%, transparent); }
 	.thesis-tile.heat-cool { --heat-glow: 0 0 14px -3px color-mix(in srgb, var(--color-heat-cool) 60%, transparent); }
-	.thesis-tile.heat-warm { --heat-glow: 0 0 22px -3px color-mix(in srgb, var(--color-heat-warm) 72%, transparent); }
+	.thesis-tile.heat-warm { --heat-glow: 0 0 26px -2px color-mix(in srgb, var(--color-heat-warm) 85%, transparent); }
 	.thesis-tile.heat-hot  { --heat-glow: 0 0 30px -2px color-mix(in srgb, var(--color-heat-hot) 90%, transparent); }
 	.thesis-tile[class*='heat-'] { box-shadow: var(--heat-glow); }
 

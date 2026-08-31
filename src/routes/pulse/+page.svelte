@@ -13,11 +13,37 @@
 		cached?: boolean;
 	}
 
-	// svelte-ignore state_referenced_locally
-	let pulse = $state<PulseResponse | null>(data.pulse as PulseResponse | null);
-	// svelte-ignore state_referenced_locally
-	let loadError = $state<string | null>(data.error);
+	let pulse = $state<PulseResponse | null>(null);
+	let loadError = $state<string | null>(null);
+	let loading = $state(true);
 	let refreshing = $state(false);
+
+	// The pulse bundles a (potentially slow) LLM call, so it's fetched here
+	// client-side instead of blocking navigation in load(). A warm 24h cache
+	// hit returns near-instantly; a cold call shows the spinner meanwhile.
+	$effect(() => {
+		let cancelled = false;
+		loading = true;
+		loadError = null;
+		fetch('/api/reports/pulse')
+			.then(async (res) => {
+				if (cancelled) return;
+				if (!res.ok) {
+					loadError = m.pulse_server_error({ status: res.status });
+					return;
+				}
+				pulse = await res.json();
+			})
+			.catch((err) => {
+				if (!cancelled) loadError = (err as Error)?.message ?? m.pulse_unknown_error();
+			})
+			.finally(() => {
+				if (!cancelled) loading = false;
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
 
 	async function refresh() {
 		refreshing = true;
@@ -63,6 +89,21 @@
 		<p class="pulse-error">{loadError}</p>
 	{/if}
 
+	{#if activity.length > 0}
+		<div class="pulse-activity card">
+			<ActivityGraph data={activity} title={m.my_platform_activity()} height={80} />
+		</div>
+	{/if}
+
+	{#if loading && !pulse}
+		<article class="pulse-report card">
+			<div class="pulse-loading">
+				<span class="pulse-spinner" aria-hidden="true"></span>
+				<span>{m.pulse_loading()}</span>
+			</div>
+		</article>
+	{/if}
+
 	{#if pulse}
 		<article class="pulse-report card">
 			{#if pulse.llm && !pulse.llm.ok}
@@ -103,12 +144,6 @@
 				<span class="pulse-summary-label">{m.pulse_summary_new_week()}</span>
 			</div>
 		</div>
-
-		{#if activity.length > 0}
-			<div class="pulse-activity card">
-				<ActivityGraph data={activity} title={m.my_platform_activity()} height={80} />
-			</div>
-		{/if}
 
 		<div class="pulse-columns">
 			<section class="pulse-col card pulse-col-hot">
@@ -278,6 +313,29 @@
 		font-size: var(--text-sm);
 		color: var(--color-text-muted);
 		margin: 0;
+	}
+
+	.pulse-loading {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		font-size: var(--text-sm);
+		color: var(--color-text-muted);
+	}
+
+	.pulse-spinner {
+		width: 1rem;
+		height: 1rem;
+		border: 2px solid var(--color-border);
+		border-top-color: var(--color-primary);
+		border-radius: 50%;
+		animation: pulse-spin 0.7s linear infinite;
+	}
+
+	@keyframes pulse-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.pulse-summary {
