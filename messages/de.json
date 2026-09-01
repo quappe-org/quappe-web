@@ -99,6 +99,7 @@
 	"thesis_back": "← Zurück",
 	"thesis_archived_banner": "Diese These wurde archiviert.",
 	"thesis_vote_first_hint": "Positioniere dich zuerst zur These — dann kannst du ihre Argumente gewichten.",
+	"argument_fork_action": "Forken",
 	"thesis_activity_title": "Aktivität: {title}",
 	"thesis_activity_fallback": "Thesen-Aktivität",
 	"thesis_heat_label": "Aktivität: {heat}",

@@ -61,6 +61,38 @@ Base locale `en`, plus `de/fr/es`. Messages in `messages/{locale}.json`, compile
 - ISO-8601 timestamp strings throughout.
 - Design decisions live in `.meta/*.skill` (esp. `.ui.skill`) — update them when you change a decision.
 
+## UI rules (always apply)
+
+These are standing expectations for every UI change here — treat them as a
+checklist, not one-off requests.
+
+- **Thesis tiles look identical everywhere.** A thesis rendered in the feed,
+  the ranking (`/top`), `/my`, and anywhere else must be visually the same
+  tile — same card chrome AND the same spacing (gap/margin/padding) between
+  tiles. The canonical inter-tile gap is `--space-lg`. Don't hardcode a
+  different gap per view. (The feed vs. ranking spacing had drifted — feed was
+  `0.75rem` while ranking/`/my` used `--space-lg`; keep them unified.)
+- **Always check layout consistency.** Before calling a UI change done, look at
+  the same element across the views it appears in (feed / ranking / detail /
+  my) and confirm alignment, spacing, and card chrome match. Inconsistent
+  padding between views is a bug, not a detail.
+- **Evaluate from multiple generations' perspectives.** For any notable UI
+  change, actively consider how users of different generations would perceive
+  and use it — what each finds important, what their reception would be
+  (discoverability, affordance clarity, text size, icon-only vs. labelled
+  controls, tolerance for density) — and give concrete recommendations, not
+  just an implementation.
+
+## Scope discipline (project- vs. org-level)
+
+- **Keep subproject-relevant notes HERE**, in this repo's `CLAUDE.md` (and
+  `.meta/*.skill`). Anything work-relevant to quappe-web — patterns, gotchas,
+  decisions, standing rules — belongs in this file, not in the workspace-level
+  org `CLAUDE.md`. This keeps a person (or agent) scoped to *this* project fully
+  functional without needing the org file. The org file is just the map; only
+  the owner works at the org level, and org-wide prose belongs in the org
+  README, not the org CLAUDE.md.
+
 ## Platform context
 
 - **quappe-service** — API + DB + logic (the contract).

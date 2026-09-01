@@ -188,7 +188,7 @@
 	.feed-list {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: var(--space-lg);
 		padding: 0.5rem 0;
 	}
 

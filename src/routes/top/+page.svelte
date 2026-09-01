@@ -370,11 +370,15 @@
 	}
 
 	/* Ranking reads best as a single centred column, not a 2-up grid — the rank
-	   numbers make order the point, so keep it linear and comfortably narrow. */
+	   numbers make order the point, so keep it linear and comfortably narrow.
+	   Tile spacing uses --space-lg to match the feed and /my (tiles look the same
+	   everywhere). The rank badge overhangs the top-left of each card by 0.75rem,
+	   so pad the list so the first badge isn't clipped by the section above. */
 	.ranked-list {
 		width: 100%;
 		max-width: 44rem;
 		margin: 0 auto;
+		padding-top: 0.75rem;
 	}
 
 	.grid.is-loading {

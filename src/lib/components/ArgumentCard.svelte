@@ -322,10 +322,11 @@
 				</button>
 			{/if}
 			{#if onFork}
-				<button class="icon-btn" class:locked={!hasThesisVote} title={hasThesisVote ? 'Propose a variant of this argument' : m.thesis_vote_first_hint()} onclick={requestFork}>
-					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<button class="fork-btn" class:locked={!hasThesisVote} title={hasThesisVote ? 'Propose a variant of this argument' : m.thesis_vote_first_hint()} onclick={requestFork}>
+					<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 						<circle cx="6" cy="3" r="2"></circle><circle cx="6" cy="21" r="2"></circle><circle cx="18" cy="12" r="2"></circle><path d="M18 10V8a2 2 0 0 0-2-2H8M6 5v14"></path>
 					</svg>
+					<span>{m.argument_fork_action()}</span>
 				</button>
 			{/if}
 		</div>
@@ -659,6 +660,36 @@
 
 	/* Locked = no thesis vote yet. Still clickable (nudges to vote), just dimmed. */
 	.icon-btn.locked {
+		opacity: 0.55;
+	}
+
+	/* Fork is the central "improve instead of reply" gesture — it gets a labelled,
+	   primary-tinted pill so it reads as an invitation, not a hidden icon. Kept
+	   next to the icon-only edit action but visually the dominant one. */
+	.fork-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		height: 26px;
+		padding: 0 0.6rem;
+		border-radius: 9999px;
+		background: var(--color-primary-bg);
+		border: 1px solid var(--color-primary);
+		color: var(--color-primary);
+		font: inherit;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: all var(--transition-fast);
+	}
+
+	.fork-btn:hover {
+		background: var(--color-primary);
+		color: #fff;
+	}
+
+	.fork-btn.locked {
 		opacity: 0.55;
 	}
 </style>
