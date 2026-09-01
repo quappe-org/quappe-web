@@ -888,6 +888,12 @@
 		margin: 0 auto;
 		padding: 2.5rem 1.5rem 4rem;
 		min-width: 0;
+		/* A swipe drags a card via translateX; without this the card can extend
+		   the document's scroll width mid-swipe, which makes the sticky topbar
+		   re-anchor and visibly wobble on mobile. `clip` (not `hidden`) contains
+		   the horizontal overflow WITHOUT creating a scroll container, so it
+		   doesn't interfere with vertical scroll or the sticky bar. */
+		overflow-x: clip;
 	}
 
 	/* ---- Site banner (admin-configurable) ---- */

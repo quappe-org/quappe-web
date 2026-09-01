@@ -10,6 +10,7 @@
 	import { budgetStore } from '$lib/stores/budget.svelte';
 	import { complexityStore } from '$lib/stores/complexity.svelte';
 	import { registerForComplexity, pickDescription } from '$lib/models/variants';
+	import { nextFibWeight } from '$lib/models/fibonacci';
 
 	let {
 		thesis,
@@ -28,9 +29,15 @@
 		onvoted?: () => void;
 	} = $props();
 
-	let voteSummary = $derived.by<VoteSummary>(() => {
+	// The server's vote_summary is the ONE source of truth for the displayed
+	// counts. We seed it from thesis.votes on load and then OVERWRITE it with
+	// the server's summary after every vote. We deliberately do NOT rebuild a
+	// synthetic thesis.votes array (that dropped weights to 1 and let the
+	// derived count drift out of sync with the server — the recurring de-vote
+	// counter bug). The user's own vote is tracked separately below.
+	function summarize(votes: Thesis['votes']): VoteSummary {
 		let support = 0, reject = 0, neutral = 0, voters = 0;
-		for (const v of thesis.votes) {
+		for (const v of votes) {
 			const w = v.weight || 1;
 			voters++;
 			if (v.type === 'support') support += w;
@@ -38,7 +45,10 @@
 			else neutral += w;
 		}
 		return { support, reject, neutral, total: support + reject + neutral, voters };
-	});
+	}
+
+	// svelte-ignore state_referenced_locally
+	let voteSummary = $state<VoteSummary>(summarize(thesis.votes));
 
 	let heat = $derived.by(() => {
 		if (heatRatio >= 1.5) return 'hot';
@@ -63,6 +73,9 @@
 		if (!hasVotedLocally) {
 			currentVote = serverVote?.type ?? null;
 			currentWeight = serverVote?.weight ?? 1;
+			// Re-seed the summary from fresh server data (navigation/reload) so a
+			// list that reloaded reflects the server counts again.
+			voteSummary = summarize(thesis.votes);
 		}
 	});
 
@@ -117,7 +130,6 @@
 		}
 		voting = true;
 		try {
-			const userId = getUserId();
 			const res = await fetch(`/api/theses/${thesis.id}/vote`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -128,35 +140,16 @@
 				return;
 			}
 			const data = await res.json();
-			const summary = data.vote_summary as VoteSummary;
-			// If same type and same weight, server retracted the vote.
+			// The server's summary is authoritative — display it verbatim. No
+			// synthetic votes-array rebuild (that lost weights and desynced the
+			// count from the server).
+			voteSummary = data.vote_summary as VoteSummary;
+			// If same type and same weight, the server retracted the vote.
 			const newVote: VoteType | null = currentVote === type && currentWeight === weight ? null : type;
 			const newWeight: number = newVote ? weight : 1;
 			currentVote = newVote;
 			currentWeight = newWeight;
 			hasVotedLocally = true;
-			// Rebuild synthetic votes list so summary reactivity works for this card.
-			const totalWeightSupport = summary.support;
-			const totalWeightReject = summary.reject;
-			const totalWeightNeutral = summary.neutral;
-			const votes = [
-				...Array(totalWeightSupport).fill({ user_id: '', type: 'support', weight: 1, cast_at: '' }),
-				...Array(totalWeightReject).fill({ user_id: '', type: 'reject', weight: 1, cast_at: '' }),
-				...Array(totalWeightNeutral).fill({ user_id: '', type: 'neutral', weight: 1, cast_at: '' })
-			];
-			if (newVote) {
-				// Replace one placeholder with the real user's vote to preserve current-vote detection.
-				const idx = votes.findIndex((v) => v.type === newVote);
-				if (idx >= 0) {
-					votes[idx] = {
-						user_id: userId,
-						type: newVote,
-						weight: newWeight,
-						cast_at: new Date().toISOString()
-					};
-				}
-			}
-			thesis.votes = votes;
 			// Let the feed (or wherever we're embedded) know the user just
 			// voted, so it can start the fade-out. Only fire on a cast that
 			// results in an active vote (not on retraction).
@@ -165,9 +158,23 @@
 			voting = false;
 		}
 	}
+
+	// A directional swipe = a vote in that direction, using the SAME climb-or-start
+	// weight logic as the buttons: if you already hold this stance, the swipe climbs
+	// the Fibonacci weight (this folds in what /my used to do with its own wrapper);
+	// otherwise it's a fresh weight-1 vote. Keeping this inside ThesisCard is what
+	// makes swipe behave identically in every view (feed / top / my / detail).
+	function castSwipe(type: 'support' | 'reject') {
+		const weight = currentVote === type ? nextFibWeight(currentWeight) : 1;
+		castVote(type, weight);
+	}
 </script>
 
-<SwipeVote oncast={showVoteButtons ? castVote : undefined}>
+<SwipeVote
+	oncast={showVoteButtons ? castVote : undefined}
+	onSwipeRight={showVoteButtons ? () => castSwipe('support') : undefined}
+	onSwipeLeft={showVoteButtons ? () => castSwipe('reject') : undefined}
+>
 	<a
 		href="/thesis/{thesis.id}"
 		class="card thesis-card heat-{heat}"

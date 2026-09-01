@@ -1,13 +1,10 @@
 <script lang="ts">
-	import type { Thesis, VoteType } from '$lib/models/types';
+	import type { Thesis } from '$lib/models/types';
 	import { getUserId } from '$lib/stores/user';
 	import { userIdTick } from '$lib/stores/user-tick.svelte';
 	import { activityStore } from '$lib/stores/activity.svelte';
-	import { budgetStore } from '$lib/stores/budget.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
-	import SwipeVote from '$lib/components/SwipeVote.svelte';
 	import ScrollSentinel from '$lib/components/ScrollSentinel.svelte';
-	import { nextFibWeight, FIB_WEIGHTS } from '$lib/models/fibonacci';
 	import { m } from '$lib/paraglide/messages';
 
 	let { data } = $props();
@@ -99,71 +96,6 @@
 		authored.forEach((t, i) => authoredRank.set(t.id, i));
 		frozenAuthoredRank = authoredRank;
 	});
-
-	// Per-thesis weight overrides for this session: swipe → step up Fibonacci.
-	let weightOverrides = $state<Map<string, number>>(new Map());
-
-	// Transient feedback when a weight-up swipe is rejected server-side
-	// (daily weight budget reached, or a brand-new identity in its first
-	// minute). Without this the swipe silently does nothing.
-	let swipeNotice = $state<string | null>(null);
-	let swipeNoticeTimer: ReturnType<typeof setTimeout> | null = null;
-	function showSwipeNotice(msg: string) {
-		swipeNotice = msg;
-		if (swipeNoticeTimer) clearTimeout(swipeNoticeTimer);
-		swipeNoticeTimer = setTimeout(() => (swipeNotice = null), 4000);
-	}
-
-	function getCurrentWeight(thesis: Thesis): number {
-		if (weightOverrides.has(thesis.id)) return weightOverrides.get(thesis.id)!;
-		const userId = getUserId();
-		const mine = thesis.votes.find((v) => v.user_id === userId);
-		return mine?.weight ?? 1;
-	}
-
-	function getCurrentVoteType(thesis: Thesis): VoteType | null {
-		const userId = getUserId();
-		const mine = thesis.votes.find((v) => v.user_id === userId);
-		return mine ? (mine.type as VoteType) : null;
-	}
-
-	async function handleWeightSwipe(thesis: Thesis, direction: 'right' | 'left') {
-		const userId = getUserId();
-		const mine = thesis.votes.find((v) => v.user_id === userId);
-		if (!mine) return; // no prior vote — nothing to weight up
-		const currentType = mine.type as VoteType;
-		const swipedType: VoteType = direction === 'right' ? 'support' : 'reject';
-		// Swipe must match the existing vote direction; ignore cross-direction swipes.
-		if (swipedType !== currentType) return;
-		const currentW = getCurrentWeight(thesis);
-		const nextW = nextFibWeight(currentW, FIB_WEIGHTS as number[]);
-		if (nextW <= currentW) return; // already at max — don't wrap back down
-		if (nextW > 1 && !budgetStore.canAffordWeight(nextW)) return;
-		if (nextW > 1) budgetStore.spendWeight(nextW);
-		try {
-			const res = await fetch(`/api/theses/${thesis.id}/vote`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ type: currentType, weight: nextW })
-			});
-			if (!res.ok) {
-				if (nextW > 1) budgetStore.refundWeight(nextW);
-				let reason = '';
-				try {
-					reason = ((await res.json()) as { error?: string }).error ?? '';
-				} catch {
-					reason = '';
-				}
-				showSwipeNotice(
-					/new identit/i.test(reason) ? m.my_weight_denied_new() : m.my_weight_denied_budget()
-				);
-				return;
-			}
-			weightOverrides = new Map(weightOverrides).set(thesis.id, nextW);
-		} catch {
-			if (nextW > 1) budgetStore.refundWeight(nextW);
-		}
-	}
 
 	let authoredPage = $derived(authoredEntries.slice(0, authoredShown));
 	let votedPage = $derived(votedEntries.slice(0, votedShown));
@@ -335,23 +267,7 @@
 			<div class="time-divider">{group.label}</div>
 			<div class="thesis-stack">
 				{#each group.entries as entry (entry.thesis.id)}
-					{@const voteType = getCurrentVoteType(entry.thesis)}
-					{@const currentW = getCurrentWeight(entry.thesis)}
-					{@const nextW = nextFibWeight(currentW, FIB_WEIGHTS as number[])}
-					<div class="voted-entry">
-						<SwipeVote
-							onSwipeRight={voteType === 'support' && nextW > currentW ? () => handleWeightSwipe(entry.thesis, 'right') : undefined}
-							onSwipeLeft={voteType === 'reject' && nextW > currentW ? () => handleWeightSwipe(entry.thesis, 'left') : undefined}
-							allowNeutral={false}
-							positiveLabel={nextW > currentW ? `weight ${currentW} → ${nextW}` : `max weight (${currentW})`}
-							negativeLabel={nextW > currentW ? `weight ${currentW} → ${nextW}` : `max weight (${currentW})`}
-						>
-							<ThesisCard thesis={entry.thesis} heatRatio={heat[entry.thesis.id] ?? 0} argumentCount={argumentCounts[entry.thesis.id] ?? 0} />
-						</SwipeVote>
-						{#if currentW > 1}
-							<span class="weight-badge" title="Your vote weight">{currentW}</span>
-						{/if}
-					</div>
+					<ThesisCard thesis={entry.thesis} heatRatio={heat[entry.thesis.id] ?? 0} argumentCount={argumentCounts[entry.thesis.id] ?? 0} />
 				{/each}
 			</div>
 		{/each}
@@ -365,10 +281,6 @@
 
 	{#if authoredEntries.length === 0 && votedEntries.length === 0}
 		<p class="empty-state">{m.my_empty_state()}</p>
-	{/if}
-
-	{#if swipeNotice}
-		<div class="swipe-notice" role="status" aria-live="polite">{swipeNotice}</div>
 	{/if}
 </section>
 
@@ -438,25 +350,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-lg, 1.25rem);
-	}
-
-	.voted-entry {
-		position: relative;
-	}
-
-	.weight-badge {
-		position: absolute;
-		top: 0.5rem;
-		right: 0.5rem;
-		z-index: 4;
-		background: var(--color-primary);
-		color: white;
-		font-size: 0.6rem;
-		font-weight: 700;
-		font-family: var(--font-mono);
-		padding: 0.1rem 0.4rem;
-		border-radius: 999px;
-		pointer-events: none;
 	}
 
 	.standpoint-panel {
@@ -556,23 +449,6 @@
 		padding: 0.5rem 0.75rem;
 		color: var(--color-reject);
 		font-size: var(--text-sm);
-	}
-
-	.swipe-notice {
-		position: fixed;
-		left: 50%;
-		bottom: 1.5rem;
-		transform: translateX(-50%);
-		z-index: 50;
-		max-width: min(92vw, 34rem);
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		box-shadow: var(--shadow-md);
-		padding: 0.6rem 0.9rem;
-		color: var(--color-text);
-		font-size: var(--text-sm);
-		text-align: center;
 	}
 
 	.standpoint-hint {

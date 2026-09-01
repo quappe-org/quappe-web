@@ -40,13 +40,13 @@
 			return;
 		}
 
-		// Weight cycles along the Fibonacci ladder (1 → 2 → 3 → 5 → 8 → reset).
-		// A fresh vote on a new stance starts at the first step.
-		let targetWeight = FIB_WEIGHTS[0];
-		if (currentVote === type) {
-			targetWeight = nextFibWeight(currentWeight);
-		}
-
+		// Weight cycles along the Fibonacci ladder (1 → 2 → 3 → 5 → 8 → 1 → …).
+		// A fresh vote on a NEW stance starts at the first step; tapping the stance
+		// you already hold climbs the ladder and wraps from 8 back to 1. The button
+		// never retracts — switching your stance (tapping the opposite side) is the
+		// only way to leave a position. This keeps the button a pure "more" gesture:
+		// one meaning per control, consistent across every view.
+		const targetWeight = currentVote === type ? nextFibWeight(currentWeight) : FIB_WEIGHTS[0];
 		oncast?.(type, targetWeight);
 	}
 </script>

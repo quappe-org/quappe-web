@@ -66,12 +66,23 @@ Base locale `en`, plus `de/fr/es`. Messages in `messages/{locale}.json`, compile
 These are standing expectations for every UI change here — treat them as a
 checklist, not one-off requests.
 
-- **Thesis tiles look identical everywhere.** A thesis rendered in the feed,
-  the ranking (`/top`), `/my`, and anywhere else must be visually the same
-  tile — same card chrome AND the same spacing (gap/margin/padding) between
-  tiles. The canonical inter-tile gap is `--space-lg`. Don't hardcode a
-  different gap per view. (The feed vs. ranking spacing had drifted — feed was
-  `0.75rem` while ranking/`/my` used `--space-lg`; keep them unified.)
+- **Objects look identical in every view.** A domain object (thesis, argument,
+  and whatever we add next) rendered in the feed, the ranking (`/top`), `/my`,
+  the detail page, and anywhere else must be visually the same tile — same card
+  chrome AND the same spacing (gap/margin/padding) between tiles. The canonical
+  inter-tile gap is `--space-lg`. Don't hardcode a different gap per view. (The
+  feed vs. ranking spacing had drifted — feed was `0.75rem` while ranking/`/my`
+  used `--space-lg`; keep them unified.)
+- **Objects BEHAVE identically in every view.** The same object's interactions
+  — voting, weight-cycling, retract, swipe, fork, translate — must work the same
+  way and produce the same result no matter which view it sits in. Achieve this
+  by rendering the ONE shared component (e.g. `ThesisCard`) everywhere and
+  keeping all interaction logic inside it; never re-implement or wrap an
+  object's behaviour per view. State the object shows must have a single source
+  of truth (for votes: the server's `vote_summary`, displayed verbatim — do NOT
+  rebuild synthetic state client-side; that caused a recurring de-vote counter
+  bug). If a view needs extra chrome, it may add non-interactive decoration
+  around the shared component, but must not fork its behaviour.
 - **Always check layout consistency.** Before calling a UI change done, look at
   the same element across the views it appears in (feed / ranking / detail /
   my) and confirm alignment, spacing, and card chrome match. Inconsistent
