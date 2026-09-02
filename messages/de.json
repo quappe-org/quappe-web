@@ -99,6 +99,8 @@
 	"thesis_back": "← Zurück",
 	"thesis_archived_banner": "Diese These wurde archiviert.",
 	"thesis_vote_first_hint": "Positioniere dich zuerst zur These — dann kannst du ihre Argumente gewichten.",
+	"budget_weight_exhausted": "Tägliches Gewichts-Budget aufgebraucht — Basis-Stimmen bleiben kostenlos.",
+	"budget_create_exhausted": "Tägliches Erstellungs-Budget aufgebraucht — morgen wieder.",
 	"argument_fork_action": "Forken",
 	"thesis_activity_title": "Aktivität: {title}",
 	"thesis_activity_fallback": "Thesen-Aktivität",

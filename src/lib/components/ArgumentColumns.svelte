@@ -6,6 +6,7 @@
 	import SwipeVote from '$lib/components/SwipeVote.svelte';
 	import { getUserId, markVotedArg } from '$lib/stores/user';
 	import { budgetStore } from '$lib/stores/budget.svelte';
+	import { noticeStore } from '$lib/stores/notice.svelte';
 	import { nextFibWeight } from '$lib/models/fibonacci';
 	import { m } from '$lib/paraglide/messages';
 
@@ -114,7 +115,7 @@
 		const isRetract = !!existing && existing.type === type && (existing.weight || 1) === weight;
 		const chargeable = !isRetract && (type === 'support' || type === 'reject') && weight > 1;
 		if (chargeable) {
-			if (!budgetStore.canAffordWeight(weight)) return;
+			if (!budgetStore.canAffordWeight(weight)) { noticeStore.show(m.budget_weight_exhausted()); return; }
 			budgetStore.spendWeight(weight);
 		}
 		votingId = arg.id;

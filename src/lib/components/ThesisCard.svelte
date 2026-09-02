@@ -8,6 +8,7 @@
 	import SwipeVote from '$lib/components/SwipeVote.svelte';
 	import LifecycleIcon from '$lib/components/LifecycleIcon.svelte';
 	import { budgetStore } from '$lib/stores/budget.svelte';
+	import { noticeStore } from '$lib/stores/notice.svelte';
 	import { complexityStore } from '$lib/stores/complexity.svelte';
 	import { registerForComplexity, pickDescription } from '$lib/models/variants';
 	import { nextFibWeight } from '$lib/models/fibonacci';
@@ -125,7 +126,7 @@
 		const isRetract = currentVote === type && currentWeight === weight;
 		const chargeable = !isRetract && (type === 'support' || type === 'reject') && weight > 1;
 		if (chargeable) {
-			if (!budgetStore.canAffordWeight(weight)) return;
+			if (!budgetStore.canAffordWeight(weight)) { noticeStore.show(m.budget_weight_exhausted()); return; }
 			budgetStore.spendWeight(weight);
 		}
 		voting = true;

@@ -4,6 +4,7 @@
 	import { categoriesStore } from '$lib/stores/categories.svelte';
 	import { activityStore } from '$lib/stores/activity.svelte';
 	import { budgetStore } from '$lib/stores/budget.svelte';
+	import { noticeStore } from '$lib/stores/notice.svelte';
 	import { getUserId, markVotedArg } from '$lib/stores/user';
 	import { forkFeedStore } from '$lib/stores/fork-feed.svelte';
 	import { abbreviateNumber } from '$lib/utils/format';
@@ -306,7 +307,7 @@
 		const isRetract = currentVote === type && currentWeight === weight;
 		const chargeable = !isRetract && (type === 'support' || type === 'reject') && weight > 1;
 		if (chargeable) {
-			if (!budgetStore.canAffordWeight(weight)) return;
+			if (!budgetStore.canAffordWeight(weight)) { noticeStore.show(m.budget_weight_exhausted()); return; }
 			budgetStore.spendWeight(weight);
 		}
 		voting = true;
@@ -994,47 +995,6 @@
 		padding-top: 0.75rem;
 		border-top: 1px solid var(--color-border);
 		flex-wrap: wrap;
-	}
-
-	/* Centred, auto-dismissing "vote on the thesis first" nudge. Matches the
-	   header modal-card shape (surface card, soft border, big shadow, dimmed
-	   backdrop). Accent-tinted so it reads as a prompt, not an error — but in
-	   calm mode it drops to the neutral surface to stay quiet. */
-	/* Vote-first nudge: uses the shared <Popup variant="modal"> shell for the
-	   backdrop + centring; here we only restyle the card as an accent-tinted
-	   prompt (calm mode drops to neutral surface). The 1.8s fade matches the
-	   JS auto-dismiss timer. Card lives inside Popup, so target it globally. */
-	:global(.vote-nudge-card) {
-		display: flex;
-		align-items: center;
-		gap: 0.7rem;
-		width: auto !important;
-		max-width: min(92vw, 22rem);
-		background: var(--color-primary) !important;
-		color: var(--color-on-primary);
-		border: none !important;
-		animation: vote-nudge-fade 1.8s ease forwards;
-	}
-	.vote-nudge-icon {
-		display: inline-flex;
-		flex-shrink: 0;
-	}
-	.vote-nudge-text {
-		margin: 0;
-		font-size: var(--text-base);
-		font-weight: 600;
-		line-height: 1.35;
-	}
-	:global([data-calm='true'] .vote-nudge-card) {
-		background: var(--color-surface) !important;
-		color: var(--color-text);
-		border: 1px solid var(--color-border) !important;
-	}
-	@keyframes vote-nudge-fade {
-		0% { opacity: 0; }
-		12% { opacity: 1; }
-		80% { opacity: 1; }
-		100% { opacity: 0; }
 	}
 
 	.thesis-admin-row {

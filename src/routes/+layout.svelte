@@ -16,8 +16,10 @@
 	import Wizard from '$lib/components/Wizard.svelte';
 	import { onboardingStore } from '$lib/stores/onboarding.svelte';
 	import { bannerStore } from '$lib/stores/banner.svelte';
+	import { noticeStore } from '$lib/stores/notice.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import LoginGate from '$lib/components/LoginGate.svelte';
+	import Popup from '$lib/components/Popup.svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -395,6 +397,17 @@
 {#if mounted && onboardingStore.open}
 	<Wizard />
 {/if}
+
+<!-- App-wide transient notice (budget exhausted, etc). One instance for the
+     whole app — every vote/create path pushes into noticeStore; the same
+     card + fade appears no matter where the action was triggered. -->
+<Popup open={noticeStore.open} variant="modal" cardClass="vote-nudge-card" onclose={() => noticeStore.dismiss()}>
+	<span class="vote-nudge-icon" aria-hidden="true">
+		<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+	</span>
+	<p class="vote-nudge-text">{noticeStore.message}</p>
+</Popup>
+
 
 <style>
 	.app {

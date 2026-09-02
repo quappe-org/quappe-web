@@ -99,6 +99,8 @@
 	"thesis_back": "← Retour",
 	"thesis_archived_banner": "Cette thèse a été archivée.",
 	"thesis_vote_first_hint": "Positionnez-vous d'abord sur la thèse — vous pourrez ensuite peser ses arguments.",
+	"budget_weight_exhausted": "Budget de poids quotidien épuisé — les votes de base restent gratuits.",
+	"budget_create_exhausted": "Budget de création quotidien épuisé — réessayez demain.",
 	"argument_fork_action": "Bifurquer",
 	"thesis_activity_title": "Activité : {title}",
 	"thesis_activity_fallback": "Activité de la thèse",

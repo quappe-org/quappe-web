@@ -669,3 +669,40 @@ input[type='range']::-moz-range-thumb {
 	cursor: pointer;
 	border: none;
 }
+
+/* App-wide transient notice card (budget exhausted, vote-first nudge). Shown
+   inside the shared <Popup variant="modal">; global because the card is
+   teleported out of the component that triggers it. Accent-tinted prompt that
+   fades on the 1.8s JS auto-dismiss timer; calm mode drops to neutral surface. */
+.vote-nudge-card {
+	display: flex;
+	align-items: center;
+	gap: 0.7rem;
+	width: auto !important;
+	max-width: min(92vw, 22rem);
+	background: var(--color-primary) !important;
+	color: var(--color-on-primary);
+	border: none !important;
+	animation: vote-nudge-fade 1.8s ease forwards;
+}
+.vote-nudge-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+}
+.vote-nudge-text {
+	margin: 0;
+	font-size: var(--text-base);
+	font-weight: 600;
+	line-height: 1.35;
+}
+[data-calm='true'] .vote-nudge-card {
+	background: var(--color-surface) !important;
+	color: var(--color-text);
+	border: 1px solid var(--color-border) !important;
+}
+@keyframes vote-nudge-fade {
+	0% { opacity: 0; }
+	12% { opacity: 1; }
+	80% { opacity: 1; }
+	100% { opacity: 0; }
+}

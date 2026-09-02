@@ -7,6 +7,7 @@
 	import VoteRow from '$lib/components/VoteRow.svelte';
 	import SwipeVote from '$lib/components/SwipeVote.svelte';
 	import { budgetStore } from '$lib/stores/budget.svelte';
+	import { noticeStore } from '$lib/stores/notice.svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let { argument, leading = false, variants = [], hasThesisVote = true, onFork, onEdit, onNeedThesisVote }: {
@@ -161,7 +162,7 @@
 		// Base weight-1 votes are free; only extra weight draws from the pool.
 		const chargeable = !isRetract && (type === 'support' || type === 'reject') && weight > 1;
 		if (chargeable) {
-			if (!budgetStore.canAffordWeight(weight)) return;
+			if (!budgetStore.canAffordWeight(weight)) { noticeStore.show(m.budget_weight_exhausted()); return; }
 			budgetStore.spendWeight(weight);
 		}
 		voting = true;
