@@ -74,6 +74,10 @@ export interface Argument {
 	attributes: ArgumentAttribute[];
 	votes: Vote[];
 	forked_from_id?: string; // argument this was forked from (parallel evolution)
+	// If set, this argument IS a thesis linked "as an argument" (companion row
+	// for a thesis edge). content is empty; display text is the linked thesis
+	// title. Lets a linked thesis be voted like any argument.
+	linked_thesis_id?: string;
 	// Optional — user-authored arguments start with `undefined`. A nightly
 	// backend LLM batch job assigns categories asynchronously.
 	categories?: Category[];
@@ -99,6 +103,26 @@ export interface Thesis {
 	lifecycle: LifecycleInfo;
 	lang?: string; // 2-letter ISO code (en|de|fr|es); undefined until LLM detects
 	meta: Meta;
+}
+
+// A user-authored directed link: a thesis (source) shown "as an argument" on
+// another thesis (target). Stanceless — the pro/con/neutral meaning comes from
+// the author's own vote on the target, never from the edge. Mirrors the service
+// type; kept in sync with quappe-service/src/lib/models/types.ts.
+export interface ThesisEdge {
+	id: string;
+	source_thesis_id: string;
+	target_thesis_id: string;
+	author_id: string;
+	created_at: string;
+}
+
+// GET /api/theses/{id}/edges response item: the edge, its loaded source thesis,
+// and the companion argument (carries the vote_summary for the linked-thesis tile).
+export interface ThesisEdgeHydrated {
+	edge: ThesisEdge;
+	thesis: Thesis;
+	argument?: Argument;
 }
 
 // API request/response types

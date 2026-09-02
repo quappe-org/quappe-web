@@ -174,6 +174,8 @@
 	oncast={showVoteButtons ? castVote : undefined}
 	onSwipeRight={showVoteButtons ? () => castSwipe('support') : undefined}
 	onSwipeLeft={showVoteButtons ? () => castSwipe('reject') : undefined}
+	heldVote={currentVote}
+	heldWeight={currentWeight}
 >
 	<a
 		href="/thesis/{thesis.id}"

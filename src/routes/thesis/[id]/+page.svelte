@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Argument, VoteType, VoteSummary, Category } from '$lib/models/types';
+	import type { Argument, VoteType, VoteSummary, Category, Thesis, ThesisEdgeHydrated } from '$lib/models/types';
 	import { complexityStore } from '$lib/stores/complexity.svelte';
 	import { categoriesStore } from '$lib/stores/categories.svelte';
 	import { activityStore } from '$lib/stores/activity.svelte';
@@ -19,6 +19,7 @@
 	import { getLocale } from '$lib/paraglide/runtime';
 	import { localeStore } from '$lib/stores/locale.svelte';
 	import { registerForComplexity, pickDescription } from '$lib/models/variants';
+	import { nextFibWeight } from '$lib/models/fibonacci';
 	import { onMount } from 'svelte';
 
 	let { data } = $props();
@@ -37,6 +38,8 @@
 	let activity = $state<ActivityDay[]>(data.activity ?? []);
 	// svelte-ignore state_referenced_locally
 	let heatRatio = $state<number>(data.heatRatio ?? 0);
+	// svelte-ignore state_referenced_locally
+	let linkedTheses = $state<ThesisEdgeHydrated[]>(data.linkedTheses ?? []);
 
 	$effect(() => {
 		thesis = data.thesis;
@@ -46,6 +49,7 @@
 		relatedMode = data.relatedMode ?? null;
 		activity = data.activity ?? [];
 		heatRatio = data.heatRatio ?? 0;
+		linkedTheses = data.linkedTheses ?? [];
 		activityStore.set([], '');
 		if (data.arguments && data.thesis) {
 			forkFeedStore.update(data.arguments, data.thesis.title);
@@ -327,6 +331,14 @@
 		}
 	}
 
+	// A directional swipe = a vote in that direction, matching ThesisCard's swipe:
+	// if you already hold this stance, the swipe climbs the Fibonacci weight;
+	// otherwise it's a fresh weight-1 vote. Keeps swipe identical across views.
+	function castThesisSwipe(type: 'support' | 'reject') {
+		const weight = currentVote === type ? nextFibWeight(currentWeight) : 1;
+		castThesisVote(type, weight);
+	}
+
 	// --- Argument form ---
 	// Opened declaratively via `argIntent`: setting it (and flipping showArgForm)
 	// mounts the form already in the right mode. Driving it through a bound ref
@@ -356,6 +368,32 @@
 			args = [...args, arg];
 		}
 	}
+
+	// --- Linked theses (thesis-as-argument) ---
+	// Linking lives inside the argument form's "link a thesis" tab (a thesis IS an
+	// argument). The vote-first gate is enforced there and by the server.
+	async function onThesisLinked(_source: Thesis) {
+		// Refetch so the list carries the real edge ids (needed for unlink) rather
+		// than an optimistic placeholder. Cheap — a single small hydrated read.
+		const res = await fetch(`/api/theses/${thesis.id}/edges`);
+		if (res.ok) {
+			const body = await res.json();
+			linkedTheses = body.edges ?? [];
+		}
+	}
+
+	async function unlinkThesis(sourceId: string) {
+		const entry = linkedTheses.find((l) => l.edge.source_thesis_id === sourceId);
+		if (!entry) return;
+		const res = await fetch(`/api/theses/${thesis.id}/edges/${entry.edge.id}`, {
+			method: 'DELETE'
+		});
+		if (res.ok) {
+			linkedTheses = linkedTheses.filter((l) => l.edge.source_thesis_id !== sourceId);
+		}
+	}
+
+	let linkedSourceIds = $derived(linkedTheses.map((l) => l.edge.source_thesis_id));
 
 	// --- Thesis edit ---
 	let editingThesis = $state(false);
@@ -467,7 +505,13 @@
 		{/if}
 
 		<!-- Thesis tile -->
-		<SwipeVote oncast={castThesisVote}>
+		<SwipeVote
+			oncast={castThesisVote}
+			onSwipeRight={() => castThesisSwipe('support')}
+			onSwipeLeft={() => castThesisSwipe('reject')}
+			heldVote={currentVote}
+			heldWeight={currentWeight}
+		>
 		<div class="thesis-tile card heat-{heat}">
 			<div class="thesis-eyebrow">
 				<a class="eyebrow-state" href="/about/lifecycle" title="Lifecycle: {thesis.lifecycle?.state ?? 'seedling'} — open explanation">
@@ -591,9 +635,11 @@
 				<ArgumentForm
 					thesisId={thesis.id}
 					intent={argIntent}
+					{linkedSourceIds}
 					onsubmitted={onArgSubmitted}
 					oncancel={() => { showArgForm = false; }}
 					onneedthesisvote={nudgeThesisVote}
+					onlinked={onThesisLinked}
 				/>
 			{/if}
 
@@ -601,6 +647,7 @@
 				{topGroups}
 				{poolGroups}
 				{totalArguments}
+				{linkedTheses}
 				{pendingReorderCount}
 				complexityCapped={argGroups.length > topGroups.length + poolGroups.length}
 				{opinionView}
@@ -609,6 +656,7 @@
 				onopenarg={openNewArg}
 				onfork={openFork}
 				onedit={openEdit}
+				onunlink={unlinkThesis}
 				onneedthesisvote={nudgeThesisVote}
 				onopinionchange={(v) => { opinionView = v; }}
 			/>

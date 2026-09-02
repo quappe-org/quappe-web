@@ -1,5 +1,5 @@
 import type { PageLoad } from './$types';
-import type { Thesis, Argument, VoteSummary } from '$lib/models/types';
+import type { Thesis, Argument, VoteSummary, ThesisEdgeHydrated } from '$lib/models/types';
 import type { ActivityDay } from '$lib/models/contract';
 
 export interface RelatedThesis {
@@ -8,11 +8,12 @@ export interface RelatedThesis {
 }
 
 export const load: PageLoad = async ({ params, fetch }) => {
-	const [thesisRes, argumentsRes, activityRes, relatedRes, statsRes] = await Promise.all([
+	const [thesisRes, argumentsRes, activityRes, relatedRes, edgesRes, statsRes] = await Promise.all([
 		fetch(`/api/theses/${params.id}`),
 		fetch(`/api/arguments?thesis_id=${params.id}`),
 		fetch(`/api/activity?thesis_id=${params.id}`),
 		fetch(`/api/theses/${params.id}/related?limit=7`),
+		fetch(`/api/theses/${params.id}/edges`),
 		fetch('/api/stats')
 	]);
 
@@ -24,6 +25,7 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			activity: [] as ActivityDay[],
 			related: [] as RelatedThesis[],
 			relatedMode: null as string | null,
+			linkedTheses: [] as ThesisEdgeHydrated[],
 			heatRatio: 0
 		};
 	}
@@ -44,8 +46,23 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		heatRatio = stats.heat?.[params.id] ?? 0;
 	}
 
+	let linkedTheses: ThesisEdgeHydrated[] = [];
+	if (edgesRes.ok) {
+		const body = await edgesRes.json();
+		linkedTheses = body.edges ?? [];
+	}
+
 	const thesis: Thesis = thesisData;
 	const voteSummary: VoteSummary = thesisData.vote_summary;
 
-	return { thesis, arguments: args, voteSummary, activity, related, relatedMode, heatRatio };
+	return {
+		thesis,
+		arguments: args,
+		voteSummary,
+		activity,
+		related,
+		relatedMode,
+		linkedTheses,
+		heatRatio
+	};
 };

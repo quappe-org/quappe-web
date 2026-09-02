@@ -284,6 +284,26 @@ html[data-invert='true'] img.logo {
 [data-calm='true'] .thesis-tile[class*='heat-'] {
 	box-shadow: var(--shadow-sm) !important;
 }
+/* Calm strips secondary/metadata chrome so only the headline, description,
+   lifecycle state, and vote remain. Thesis tile: category (eyebrow chip + tag
+   row), argument counter with its separators, and — on the detail page — the
+   activity heatmap and related-thesis panel. Argument tile: auto-categorised
+   topic pills + the auto-detected evidence badge (source links + hashtags
+   stay — those carry content, not decoration). The lifecycle state WORD stays
+   (its icon is hidden by LifecycleIcon), matching the calm convention. Eyebrow
+   rules are scoped to .thesis-card so the detail tile's own `state · heat`
+   separator is untouched (both its neighbours stay visible). */
+[data-calm='true'] .thesis-card .eyebrow-cat,
+[data-calm='true'] .thesis-card .eyebrow-args,
+[data-calm='true'] .thesis-card .eyebrow-sep,
+[data-calm='true'] .thesis-categories,
+[data-calm='true'] .thesis-meta-row,
+[data-calm='true'] .related-panel,
+[data-calm='true'] .thesis-activity,
+[data-calm='true'] .arg-cat,
+[data-calm='true'] .evidence {
+	display: none !important;
+}
 
 /* High contrast: strengthen text + borders for readability. */
 [data-contrast='true'] {

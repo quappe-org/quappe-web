@@ -1,6 +1,12 @@
 <script lang="ts">
-	import type { Argument } from '$lib/models/types';
+	import type { Argument, ThesisEdgeHydrated, VoteSummary, VoteType } from '$lib/models/types';
 	import ArgumentCard from '$lib/components/ArgumentCard.svelte';
+	import LifecycleIcon from '$lib/components/LifecycleIcon.svelte';
+	import VoteRow from '$lib/components/VoteRow.svelte';
+	import SwipeVote from '$lib/components/SwipeVote.svelte';
+	import { getUserId, markVotedArg } from '$lib/stores/user';
+	import { budgetStore } from '$lib/stores/budget.svelte';
+	import { nextFibWeight } from '$lib/models/fibonacci';
 	import { m } from '$lib/paraglide/messages';
 
 	interface ArgGroup {
@@ -16,6 +22,8 @@
 		topGroups: ArgGroup[];
 		poolGroups: ArgGroup[];
 		totalArguments: number;
+		/** Theses linked onto this thesis "as arguments" — rendered atop the list. */
+		linkedTheses: ThesisEdgeHydrated[];
 		pendingReorderCount: number;
 		complexityCapped: boolean;
 		opinionView: OpinionView;
@@ -25,6 +33,7 @@
 		onopenarg: () => void;
 		onfork: (source: Argument) => void;
 		onedit: (target: Argument) => void;
+		onunlink: (sourceId: string) => void;
 		onneedthesisvote: () => void;
 		onopinionchange: (view: OpinionView) => void;
 	}
@@ -33,6 +42,7 @@
 		topGroups,
 		poolGroups,
 		totalArguments,
+		linkedTheses,
 		pendingReorderCount,
 		complexityCapped,
 		opinionView,
@@ -41,6 +51,7 @@
 		onopenarg,
 		onfork,
 		onedit,
+		onunlink,
 		onneedthesisvote,
 		onopinionchange
 	}: Props = $props();
@@ -57,10 +68,100 @@
 
 	let visibleTop = $derived(topGroups.filter((g) => !ignoredIds.has(g.root.id)));
 	let visiblePool = $derived(poolGroups.filter((g) => !ignoredIds.has(g.root.id)));
-	let visibleTotal = $derived(totalArguments - ignoredIds.size);
+	// Linked theses count as arguments in the tally (a thesis IS an argument here).
+	let visibleTotal = $derived(totalArguments - ignoredIds.size + linkedTheses.length);
+
+	let uid = $derived(getUserId());
 
 	function ignore(id: string) {
 		ignoredIds = new Set([...ignoredIds, id]);
+	}
+
+	function summaryOf(arg: Argument): VoteSummary {
+		let support = 0, reject = 0, neutral = 0, voters = 0;
+		for (const v of arg.votes) {
+			const w = v.weight || 1;
+			voters++;
+			if (v.type === 'support') support += w;
+			else if (v.type === 'reject') reject += w;
+			else neutral += w;
+		}
+		return { support, reject, neutral, total: support + reject + neutral, voters };
+	}
+
+	function currentVoteOf(arg: Argument): VoteType | null {
+		if (typeof window === 'undefined') return null;
+		const v = arg.votes.find((vote) => vote.user_id === uid);
+		return v ? v.type : null;
+	}
+
+	function currentWeightOf(arg: Argument): number {
+		if (typeof window === 'undefined') return 1;
+		const v = arg.votes.find((vote) => vote.user_id === uid);
+		return v ? (v.weight || 1) : 1;
+	}
+
+	// Which companion argument is mid-request (guards double-submit per tile).
+	let votingId = $state<string | null>(null);
+
+	// Vote on a linked thesis via its companion argument — same endpoint and
+	// behaviour as a native argument (satisfies "objects behave identically").
+	// The companion is directionless; the vote goes to target_type='argument',
+	// never to thesis B's own score.
+	async function castLinkedVote(arg: Argument, type: VoteType, weight: number) {
+		if (votingId) return;
+		const existing = arg.votes.find((v) => v.user_id === uid);
+		const isRetract = !!existing && existing.type === type && (existing.weight || 1) === weight;
+		const chargeable = !isRetract && (type === 'support' || type === 'reject') && weight > 1;
+		if (chargeable) {
+			if (!budgetStore.canAffordWeight(weight)) return;
+			budgetStore.spendWeight(weight);
+		}
+		votingId = arg.id;
+		try {
+			const res = await fetch(`/api/arguments/${arg.id}/vote`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type, weight })
+			});
+			if (!res.ok) {
+				if (chargeable) budgetStore.refundWeight(weight);
+				if (res.status === 403) {
+					const err = await res.json().catch(() => null);
+					if (err?.code === 'thesis_vote_required') onneedthesisvote();
+				}
+				return;
+			}
+			const data = await res.json();
+			const summary = data.vote_summary as VoteSummary;
+			const newVote: VoteType | null = isRetract ? null : type;
+			const newWeight = newVote ? weight : 1;
+			if (newVote) markVotedArg(arg.id);
+
+			// Rebuild votes from the server summary (single source of truth), placing
+			// this user's vote so the widget reflects the retract/switch immediately.
+			const votes = [
+				...Array(summary.support).fill({ user_id: '', type: 'support', weight: 1, cast_at: '' }),
+				...Array(summary.reject).fill({ user_id: '', type: 'reject', weight: 1, cast_at: '' }),
+				...Array(summary.neutral).fill({ user_id: '', type: 'neutral', weight: 1, cast_at: '' })
+			];
+			if (newVote) {
+				const idx = votes.findIndex((v) => v.type === newVote);
+				if (idx >= 0) votes[idx] = { user_id: uid, type: newVote, weight: newWeight, cast_at: new Date().toISOString() };
+			}
+			arg.votes = votes;
+		} finally {
+			votingId = null;
+		}
+	}
+
+	// A directional swipe on a linked-thesis tile = a vote in that direction,
+	// climbing the Fibonacci weight if the same stance is already held (mirrors
+	// ThesisCard.castSwipe, so swipe strengthens identically everywhere).
+	function castLinkedSwipe(arg: Argument, type: 'support' | 'reject') {
+		const held = arg.votes.find((v) => v.user_id === uid);
+		const weight = held && held.type === type ? nextFibWeight(held.weight || 1) : 1;
+		castLinkedVote(arg, type, weight);
 	}
 </script>
 
@@ -97,11 +198,70 @@
 		<button class="segmented-btn" class:active={opinionView === 'rejecters'} onclick={() => onopinionchange('rejecters')}>{m.opinion_view_rejecters()}</button>
 	</div>
 	<div class="arguments-list">
+		{#each linkedTheses as item (item.edge.id)}
+			<div class="arg-row">
+				{#if item.argument}
+					<SwipeVote
+						onSwipeRight={() => castLinkedSwipe(item.argument!, 'support')}
+						onSwipeLeft={() => castLinkedSwipe(item.argument!, 'reject')}
+						allowNeutral={false}
+						positiveLabel={m.vote_agree()}
+						negativeLabel={m.vote_disagree()}
+						heldVote={currentVoteOf(item.argument)}
+						heldWeight={currentWeightOf(item.argument)}
+					>
+						<div class="linked-tile">
+							<a class="linked-tile-head" href="/thesis/{item.thesis.id}">
+								<span class="linked-badge">
+									<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+									{m.linked_thesis_badge()}
+								</span>
+								<span class="linked-tile-title">{item.thesis.title}</span>
+								<LifecycleIcon state={item.thesis.lifecycle.state} />
+							</a>
+							<div class="linked-tile-vote">
+								<VoteRow
+									summary={summaryOf(item.argument)}
+									currentVote={currentVoteOf(item.argument)}
+									currentWeight={currentWeightOf(item.argument)}
+									voting={votingId === item.argument.id}
+									compact
+									hideNeutral
+									agreeMode
+									oncast={(type, weight) => castLinkedVote(item.argument!, type, weight)}
+								/>
+							</div>
+						</div>
+					</SwipeVote>
+				{:else}
+					<div class="linked-tile">
+						<a class="linked-tile-head" href="/thesis/{item.thesis.id}">
+							<span class="linked-badge">
+								<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+								{m.linked_thesis_badge()}
+							</span>
+							<span class="linked-tile-title">{item.thesis.title}</span>
+							<LifecycleIcon state={item.thesis.lifecycle.state} />
+						</a>
+					</div>
+				{/if}
+				{#if item.edge.author_id === uid}
+					<button
+						class="ignore-btn"
+						onclick={() => onunlink(item.edge.source_thesis_id)}
+						title={m.linked_thesis_remove()}
+						aria-label={m.linked_thesis_remove()}
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+					</button>
+				{/if}
+			</div>
+		{/each}
 		{#each visibleTop as g, idx (g.root.id)}
 			<div class="arg-row">
 				<ArgumentCard
 					argument={g.root}
-					leading={idx === 0}
+					leading={idx === 0 && linkedTheses.length === 0}
 					variants={g.variants}
 					{hasThesisVote}
 					onFork={onfork}
@@ -113,7 +273,7 @@
 				</button>
 			</div>
 		{/each}
-		{#if visibleTop.length === 0}
+		{#if visibleTop.length === 0 && linkedTheses.length === 0}
 			<p class="col-empty">{m.argcol_empty_support()}</p>
 		{/if}
 	</div>
@@ -244,6 +404,66 @@
 	/* Ignore button wrapper */
 	.arg-row {
 		position: relative;
+	}
+
+	/* A linked thesis rendered inside the argument list. Shares the argument-card
+	   chrome (surface + border + radius + padding) so it reads as a sibling of the
+	   arguments, but carries a "thesis" badge + lifecycle glyph. Unlike a native
+	   argument its display text is the linked thesis title (content is empty), and
+	   it is voted through its companion argument in the footer. */
+	.linked-tile {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		padding: 0.85rem 1rem;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		color: var(--color-text);
+	}
+
+	.linked-tile-head {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		text-decoration: none;
+		color: inherit;
+		border-radius: var(--radius-md);
+		transition: color var(--transition-fast);
+	}
+
+	.linked-tile-head:hover .linked-tile-title {
+		color: var(--color-primary);
+	}
+
+	.linked-tile-vote {
+		padding-top: 0.5rem;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.linked-badge {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.65rem;
+		font-family: var(--font-mono);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-primary);
+		background: var(--color-primary-bg);
+		border-radius: 9999px;
+		padding: 0.15rem 0.5rem;
+	}
+
+	.linked-tile-title {
+		font-size: var(--text-base);
+		font-weight: 600;
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.ignore-btn {

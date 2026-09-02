@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { VoteType } from '$lib/models/types';
+	import { nextFibWeight } from '$lib/models/fibonacci';
 	import { onMount } from 'svelte';
 
 	interface Props {
@@ -19,6 +20,12 @@
 		negativeLabel?: string;
 		positiveColor?: string; // override the tint (defaults to support green)
 		negativeColor?: string;
+		// The stance the viewer already holds + its weight. Used only to PREVIEW
+		// the Fibonacci weight a completing swipe would land on (e.g. "✓ support ×3"
+		// when re-swiping a held ×2). Purely cosmetic — the actual climb is decided
+		// by the caller's cast handler; this just mirrors it in the drag overlay.
+		heldVote?: VoteType | null;
+		heldWeight?: number;
 	}
 
 	let {
@@ -31,7 +38,9 @@
 		positiveLabel = 'support',
 		negativeLabel = 'reject',
 		positiveColor = 'var(--color-support)',
-		negativeColor = 'var(--color-reject)'
+		negativeColor = 'var(--color-reject)',
+		heldVote = null,
+		heldWeight = 1
 	}: Props = $props();
 
 	let root = $state<HTMLElement | null>(null);
@@ -45,6 +54,9 @@
 	let lastTapY = 0;
 	let pointerActive = false;
 	let axisLocked: 'x' | 'y' | null = null;
+	// Set true when a swipe casts, so the synthesised click that follows a drag
+	// is swallowed (prevents an <a href> child from navigating on swipe).
+	let suppressClick = false;
 
 	const SWIPE_THRESHOLD = 60;
 	const DOUBLE_TAP_MS = 300;
@@ -101,6 +113,11 @@
 
 		// Swipe cast
 		if (wasDragging && Math.abs(finalDx) >= SWIPE_THRESHOLD) {
+			// A completed swipe must NOT also fire the wrapped element's click
+			// (e.g. an <a href> navigating away). Swallow the next click in the
+			// capture phase. Needed for mouse/DevTools emulation especially, where
+			// a click is synthesised even after a dragging pointerup.
+			suppressClick = true;
 			if (finalDx > 0) {
 				// Right: prefer generic action, fall back to support vote.
 				if (onSwipeRight) onSwipeRight();
@@ -137,10 +154,28 @@
 		dx = 0;
 	}
 
+	// Capture-phase: eat the click that a completed swipe would otherwise trigger
+	// on a child link/button. One-shot — clears itself so normal taps still work.
+	function onClickCapture(e: MouseEvent) {
+		if (suppressClick) {
+			e.preventDefault();
+			e.stopPropagation();
+			suppressClick = false;
+		}
+	}
+
 	let tintOpacity = $derived(Math.min(0.35, Math.abs(dx) / 300));
 	let tintColor = $derived(
 		dx > 0 ? positiveColor : dx < 0 ? negativeColor : 'transparent'
 	);
+	// The Fibonacci weight a completing swipe would land on, for the current drag
+	// direction: climbs only when the viewer already holds THIS side; otherwise a
+	// fresh vote starts at 1. Mirrors the caller's cast logic so the overlay's ×N
+	// preview matches what actually happens on release.
+	let projectedWeight = $derived.by(() => {
+		const dir: VoteType = dx > 0 ? 'support' : 'reject';
+		return heldVote === dir ? nextFibWeight(heldWeight || 1) : 1;
+	});
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -152,6 +187,7 @@
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
 	onpointercancel={onPointerCancel}
+	onclickcapture={onClickCapture}
 	style="--dx: {dx}px; --tint-opacity: {tintOpacity}; --tint-color: {tintColor}"
 >
 	{@render children()}
@@ -159,6 +195,7 @@
 		<div class="swipe-overlay" aria-hidden="true">
 			<span class="swipe-label" style="color: {tintColor}">
 				{#if dx > 0}✓ {positiveLabel}{:else}✗ {negativeLabel}{/if}
+				{#if heldVote && projectedWeight > 1}<span class="swipe-weight" style="background: {tintColor}">×{projectedWeight}</span>{/if}
 			</span>
 		</div>
 	{/if}
@@ -214,5 +251,18 @@
 		padding: 0.35rem 0.75rem;
 		border-radius: 999px;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	}
+
+	/* Projected Fibonacci weight the swipe will land on (×2/×3/×5/×8). The pill
+	   background is the stance colour (set inline from tintColor); white text for
+	   contrast. A filled chip so the climb reads at a glance during the drag. */
+	.swipe-weight {
+		margin-left: 0.35rem;
+		padding: 0.05rem 0.4rem;
+		border-radius: 999px;
+		font-family: var(--font-mono);
+		font-size: 0.85em;
+		font-weight: 700;
+		color: #fff;
 	}
 </style>

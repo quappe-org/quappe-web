@@ -213,7 +213,7 @@
 	}
 </script>
 
-<SwipeVote oncast={castVote} allowNeutral={false} positiveLabel={m.vote_agree()} negativeLabel={m.vote_disagree()}>
+<SwipeVote oncast={castVote} allowNeutral={false} positiveLabel={m.vote_agree()} negativeLabel={m.vote_disagree()} heldVote={currentVote} heldWeight={currentWeight}>
 	<article class="argument-card" class:argument-leading={leading} data-arg-id={active.id}>
 	{#if hasVariants && !simpleMode}
 		<button class="variant-toggle" onclick={() => expanded = !expanded} aria-expanded={expanded}>
