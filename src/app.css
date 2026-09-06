@@ -21,12 +21,12 @@ html[data-invert='true'] img.logo {
 
 :root {
 	/* Colors */
-	--color-bg: #fafafa;
+	--color-bg: #f6f8fa;
 	--color-surface: #ffffff;
-	--color-border: #eaeef3;
-	--color-text: #1a202c;
-	--color-text-muted: #64748b;
-	--color-text-light: #94a3b8;
+	--color-border: #dce6ed;
+	--color-text: #162030;
+	--color-text-muted: #52667a;
+	--color-text-light: #8aa0b4;
 
 	/* Accent colors for votes */
 	--color-support: #16a34a;
@@ -39,29 +39,27 @@ html[data-invert='true'] img.logo {
 	--color-neutral-bg: #f9fafb;
 	--color-neutral-border: #e5e7eb;
 
-	/* Primary */
-	--color-primary: #4f46e5;
-	--color-primary-hover: #4338ca;
-	--color-primary-bg: #eef2ff;
+	/* Primary — Seeblau im Sommer, klar und lebendig */
+	--color-primary: #1a6fa8;
+	--color-primary-hover: #145a8a;
+	--color-primary-bg: #e6f2fa;
 	--color-on-primary: #ffffff;
 
-	/* Variant / fork family indicator — uses support-green by default */
+	/* Variant / fork family indicator */
 	--color-variant: #059669;
 	--color-variant-bg: #ecfdf5;
 	--color-variant-border: #6ee7b7;
 
 	/* Hashtag chip */
-	--color-hashtag: #0e7490;
-	--color-hashtag-bg: #ecfeff;
-	--color-hashtag-border: #a5f3fc;
+	--color-hashtag: #1a6fa8;
+	--color-hashtag-bg: #e6f2fa;
+	--color-hashtag-border: #8bbfe0;
 
-	/* Heat scale — thesis engagement warmth. Shared by the ThesisCard glow
-	   and the /about heat legend so the two never drift apart. Each theme
-	   overrides these four so the heat reads in that theme's own palette. */
-	--color-heat-hot: #ef4444;
-	--color-heat-warm: #f59e0b;
-	--color-heat-cool: #38bdf8;
-	--color-heat-cold: #94a3b8;
+	/* Heat scale — Sonnenstrahlen auf dem See: Gold bis Tiefwasser */
+	--color-heat-hot: #c8831a;
+	--color-heat-warm: #e8b84b;
+	--color-heat-cool: #1a6fa8;
+	--color-heat-cold: #8aafc0;
 
 	/* Spacing */
 	--space-xs: 0.25rem;
@@ -72,10 +70,8 @@ html[data-invert='true'] img.logo {
 	--space-2xl: 3rem;
 
 	/* Typography */
-	--font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-		sans-serif;
-	--font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia,
-		Charter, 'Bitstream Charter', 'Times New Roman', serif;
+	--font-sans: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	--font-serif: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
 	--font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
 	--text-xs: 0.75rem;
 	--text-sm: 0.875rem;
@@ -85,16 +81,16 @@ html[data-invert='true'] img.logo {
 	--text-2xl: 1.5rem;
 	--text-3xl: 1.875rem;
 
-	/* Borders — softer, rounder edges throughout */
-	--radius-sm: 0.4rem;
-	--radius-md: 0.7rem;
-	--radius-lg: 1rem;
-	--radius-xl: 1.4rem;
+	/* Borders — etwas kantiger, eigenständiger Rhythmus */
+	--radius-sm: 0.25rem;
+	--radius-md: 0.5rem;
+	--radius-lg: 0.75rem;
+	--radius-xl: 1.1rem;
 
-	/* Shadows — soft, diffuse, low-contrast (gentle on the edges) */
-	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
-	--shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -2px rgba(0, 0, 0, 0.04);
-	--shadow-lg: 0 12px 28px -6px rgba(0, 0, 0, 0.08), 0 6px 12px -6px rgba(0, 0, 0, 0.05);
+	/* Shadows — etwas mehr Präsenz, aber nicht diffus */
+	--shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.05);
+	--shadow-md: 0 4px 14px -2px rgba(0, 0, 0, 0.10), 0 2px 6px -2px rgba(0, 0, 0, 0.06);
+	--shadow-lg: 0 12px 32px -6px rgba(0, 0, 0, 0.13), 0 6px 14px -6px rgba(0, 0, 0, 0.08);
 	/* Coloured glow, tinted by the active primary — used for raised accent
 	   elements like the mobile + bubble. Follows the theme automatically. */
 	--shadow-primary: 0 3px 12px color-mix(in srgb, var(--color-primary) 55%, transparent);
@@ -123,16 +119,16 @@ html[data-invert='true'] img.logo {
 	--color-neutral-bg: #f6f6f7;
 	--color-neutral-border: #e0e1e4;
 
-	--color-primary: #8b7bd9;
-	--color-primary-hover: #7566cc;
-	--color-primary-bg: #f2effb;
+	--color-primary: #3a7fb8;
+	--color-primary-hover: #2e6897;
+	--color-primary-bg: #eaf3fa;
 
 	--color-variant: #7ab89c;
 	--color-variant-bg: #f0f8f4;
 	--color-variant-border: #cbe6d8;
-	--color-hashtag: #7ab5c4;
-	--color-hashtag-bg: #f0f8fb;
-	--color-hashtag-border: #b8dde8;
+	--color-hashtag: #3a7fb8;
+	--color-hashtag-bg: #eaf3fa;
+	--color-hashtag-border: #a0c8e0;
 
 	--color-heat-hot: #e08a8a;
 	--color-heat-warm: #e6b877;
