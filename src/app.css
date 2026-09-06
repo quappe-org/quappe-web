@@ -584,7 +584,7 @@ label {
 	gap: var(--space-lg);
 }
 
-@media (min-width: 640px) {
+@media (min-width: 900px) {
 	.grid-2 {
 		grid-template-columns: repeat(2, 1fr);
 	}
