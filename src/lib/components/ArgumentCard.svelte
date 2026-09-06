@@ -6,6 +6,7 @@
 	import { registerForComplexity } from '$lib/models/variants';
 	import VoteRow from '$lib/components/VoteRow.svelte';
 	import SwipeVote from '$lib/components/SwipeVote.svelte';
+	import Popup from '$lib/components/Popup.svelte';
 	import { budgetStore } from '$lib/stores/budget.svelte';
 	import { noticeStore } from '$lib/stores/notice.svelte';
 	import { m } from '$lib/paraglide/messages';
@@ -226,48 +227,6 @@
 		</button>
 	{/if}
 
-	{#if expanded && !simpleMode}
-		<div class="variant-picker">
-			<div class="variant-picker-head">
-				<span class="variant-picker-title">{m.variant_pick_title()}</span>
-				<div class="variant-sort">
-					<button class="variant-sort-btn" class:variant-sort-active={sortMode === 'top'} onclick={() => sortMode = 'top'}>{m.variant_sort_top()}</button>
-					<button class="variant-sort-btn" class:variant-sort-active={sortMode === 'latest'} onclick={() => sortMode = 'latest'}>{m.variant_sort_latest()}</button>
-				</div>
-			</div>
-			<ul class="variant-list">
-				{#each visibleVariants as v, i (v.id)}
-					<li>
-						<label class="variant-option" class:variant-option-active={active.id === v.id}>
-							<input
-								type="radio"
-								name="variant-{argument.id}"
-								checked={active.id === v.id}
-								onchange={() => selectVariant(v)}
-							/>
-							<span class="variant-option-body">
-								<span class="variant-option-text">{v.content}</span>
-								<span class="variant-option-meta">
-									{#if i === 0 && sortMode === 'top'}<span class="variant-badge-lead">{m.variant_leading()}</span>{/if}
-									<span class="variant-option-votes">{supportVotes(v)}</span>
-								</span>
-							</span>
-						</label>
-					</li>
-				{/each}
-			</ul>
-			{#if hiddenCount > 0}
-				<button type="button" class="variant-more" onclick={() => showAllVariants = true}>
-					{m.variant_more({ count: hiddenCount })}
-				</button>
-			{:else if showAllVariants && sortedFamily.length > maxVariants}
-				<button type="button" class="variant-more" onclick={() => showAllVariants = false}>
-					{m.variant_show_less()}
-				</button>
-			{/if}
-		</div>
-	{/if}
-
 	<p class="argument-content">{active.content}</p>
 
 	<div class="argument-meta">
@@ -335,6 +294,68 @@
 	</article>
 </SwipeVote>
 
+<Popup open={expanded && !simpleMode} variant="sheet" onclose={() => (expanded = false)} labelledby="variant-picker-title-{argument.id}">
+	<div class="variant-picker">
+		<div class="form-header">
+			<div class="variant-picker-heading">
+				<nav class="variant-breadcrumb" aria-label="context">
+					<span>{m.variant_level_thesis()}</span>
+					<span class="variant-breadcrumb-sep">›</span>
+					<span>{m.variant_level_argument()}</span>
+					<span class="variant-breadcrumb-sep">›</span>
+					<span class="variant-breadcrumb-current">{m.variant_level_variant()}</span>
+				</nav>
+				<h2 class="form-title" id="variant-picker-title-{argument.id}">{m.variant_pick_title()}</h2>
+			</div>
+			<button
+				type="button"
+				class="form-close"
+				aria-label={m.variant_pick_close_aria()}
+				title={m.variant_pick_close_aria()}
+				onclick={() => (expanded = false)}
+			>
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+			</button>
+		</div>
+
+		<div class="variant-sort" role="group" aria-label={m.variant_pick_title()}>
+			<button class="variant-sort-btn" class:variant-sort-active={sortMode === 'top'} onclick={() => sortMode = 'top'}>{m.variant_sort_top()}</button>
+			<button class="variant-sort-btn" class:variant-sort-active={sortMode === 'latest'} onclick={() => sortMode = 'latest'}>{m.variant_sort_latest()}</button>
+		</div>
+
+		<ul class="variant-list">
+			{#each visibleVariants as v, i (v.id)}
+				<li>
+					<label class="variant-option" class:variant-option-active={active.id === v.id}>
+						<input
+							type="radio"
+							name="variant-{argument.id}"
+							checked={active.id === v.id}
+							onclick={() => { selectVariant(v); expanded = false; }}
+						/>
+						<span class="variant-option-body">
+							<span class="variant-option-text">{v.content}</span>
+							<span class="variant-option-meta">
+								{#if i === 0 && sortMode === 'top'}<span class="variant-badge-lead">{m.variant_leading()}</span>{/if}
+								<span class="variant-option-votes">{supportVotes(v)}</span>
+							</span>
+						</span>
+					</label>
+				</li>
+			{/each}
+		</ul>
+		{#if hiddenCount > 0}
+			<button type="button" class="variant-more" onclick={() => showAllVariants = true}>
+				{m.variant_more({ count: hiddenCount })}
+			</button>
+		{:else if showAllVariants && sortedFamily.length > maxVariants}
+			<button type="button" class="variant-more" onclick={() => showAllVariants = false}>
+				{m.variant_show_less()}
+			</button>
+		{/if}
+	</div>
+</Popup>
+
 <style>
 	.argument-card {
 		background: var(--color-surface);
@@ -361,21 +382,29 @@
 		font-size: calc(var(--text-sm) * 1.08);
 	}
 
-	/* Variant toggle (collapsed header) */
+	/* Variant toggle (collapsed header). Roomy hit target — this is the door to
+	   the whole variant sheet, so it must be easy to tap, not a hairline. */
 	.variant-toggle {
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
 		width: 100%;
-		padding: 0.2rem 0;
+		padding: 0.5rem 0.4rem;
+		margin: -0.2rem 0;
+		border-radius: var(--radius-sm);
 		background: none;
 		border: none;
 		cursor: pointer;
 		color: var(--color-variant);
-		font-size: 0.7rem;
+		font-size: 0.72rem;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
+		transition: background var(--transition-fast);
+	}
+
+	.variant-toggle:hover {
+		background: var(--color-variant-bg);
 	}
 
 	.variant-fork-icon {
@@ -397,40 +426,87 @@
 		transform: rotate(180deg);
 	}
 
-	/* Variant picker (expanded) */
+	/* Variant picker — lives in a sheet Popup, which supplies the card chrome,
+	   so the picker itself is a plain flex column (no own border/background).
+	   Header, title and × close reuse the same vocabulary as CreateThesisForm
+	   so every sheet reads the same way. */
 	.variant-picker {
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
-		padding: 0.5rem;
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
+		gap: 0.85rem;
 	}
 
-	.variant-picker-head {
+	.form-header {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: space-between;
 		gap: 0.5rem;
 	}
 
-	.variant-picker-title {
-		font-size: 0.65rem;
-		font-weight: 600;
+	.variant-picker-heading {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		min-width: 0;
+	}
+
+	/* Breadcrumb orients the reader: which level of These › Argument › Variante
+	   this sheet operates on. Purely informational — not links. */
+	.variant-breadcrumb {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: var(--text-xs);
+		color: var(--color-text-light);
 		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		letter-spacing: 0.05em;
+	}
+
+	.variant-breadcrumb-sep {
+		color: var(--color-text-light);
+		opacity: 0.7;
+	}
+
+	.variant-breadcrumb-current {
+		color: var(--color-variant);
+		font-weight: 700;
+	}
+
+	.form-title {
+		font-size: var(--text-lg);
+		font-weight: 600;
+		margin: 0;
+	}
+
+	.form-close {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.5rem;
+		height: 2.5rem;
+		padding: 0;
+		border: 1px solid transparent;
+		background: transparent;
 		color: var(--color-text-muted);
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.form-close:hover {
+		background: var(--color-reject-bg);
+		border-color: var(--color-reject);
+		color: var(--color-reject);
 	}
 
 	.variant-sort {
 		display: flex;
-		gap: 0.2rem;
+		gap: 0.3rem;
 	}
 
 	.variant-sort-btn {
-		font-size: 0.6rem;
-		padding: 0.1rem 0.4rem;
+		font-size: var(--text-xs);
+		padding: 0.25rem 0.7rem;
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--color-border);
 		background: var(--color-surface);
@@ -451,15 +527,15 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.3rem;
+		gap: 0.4rem;
 	}
 
 	.variant-option {
 		display: flex;
 		align-items: flex-start;
-		gap: 0.5rem;
-		padding: 0.4rem 0.5rem;
-		border-radius: var(--radius-sm);
+		gap: 0.6rem;
+		padding: 0.7rem 0.75rem;
+		border-radius: var(--radius-md);
 		border: 1px solid var(--color-border);
 		background: var(--color-surface);
 		cursor: pointer;
@@ -476,7 +552,7 @@
 	}
 
 	.variant-option input {
-		margin-top: 0.15rem;
+		margin-top: 0.2rem;
 		flex-shrink: 0;
 		accent-color: var(--color-variant);
 	}
@@ -486,12 +562,12 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.2rem;
+		gap: 0.3rem;
 	}
 
 	.variant-option-text {
-		font-size: var(--text-xs);
-		line-height: 1.4;
+		font-size: var(--text-sm);
+		line-height: 1.5;
 		color: var(--color-text);
 	}
 
@@ -502,18 +578,18 @@
 	}
 
 	.variant-badge-lead {
-		font-size: 0.55rem;
+		font-size: var(--text-xs);
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--color-variant);
 		background: var(--color-variant-bg);
-		padding: 0.05rem 0.3rem;
+		padding: 0.1rem 0.4rem;
 		border-radius: var(--radius-sm);
 	}
 
 	.variant-option-votes {
-		font-size: 0.65rem;
+		font-size: var(--text-xs);
 		font-weight: 600;
 		color: var(--color-text-light);
 		font-family: var(--font-mono);
