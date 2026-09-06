@@ -632,18 +632,6 @@
 		</SwipeVote>
 
 		<section class="arguments-section">
-			{#if showArgForm}
-				<ArgumentForm
-					thesisId={thesis.id}
-					intent={argIntent}
-					{linkedSourceIds}
-					onsubmitted={onArgSubmitted}
-					oncancel={() => { showArgForm = false; }}
-					onneedthesisvote={nudgeThesisVote}
-					onlinked={onThesisLinked}
-				/>
-			{/if}
-
 			<ArgumentColumns
 				{topGroups}
 				{poolGroups}
@@ -722,6 +710,18 @@
 			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z"></path><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
 		</span>
 		<p class="vote-nudge-text">{m.thesis_vote_first_hint()}</p>
+	</Popup>
+
+	<Popup open={showArgForm} variant="sheet" backdropClose={false} onclose={() => { showArgForm = false; }}>
+		<ArgumentForm
+			thesisId={thesis.id}
+			intent={argIntent}
+			{linkedSourceIds}
+			onsubmitted={onArgSubmitted}
+			oncancel={() => { showArgForm = false; }}
+			onneedthesisvote={nudgeThesisVote}
+			onlinked={onThesisLinked}
+		/>
 	</Popup>
 {:else}
 	<div class="not-found">
