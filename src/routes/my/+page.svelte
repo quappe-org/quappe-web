@@ -78,8 +78,14 @@
 	// allTheses — sorting newest-first by the server's updated_at (bumped on every
 	// vote, incl. weight changes) with created_at as a tiebreak/fallback.
 	$effect(() => {
+		userIdTick(); // re-run once bootstrapUserId() replaces the cached id
 		const userId = getUserId();
 		const source = data.theses ?? [];
+		// Until the cookie roundtrip resolves, getUserId() is '' — freezing the
+		// rank now would lock in EMPTY maps (no thesis matches user_id ''), and the
+		// derived lists gate on these maps, so /my would stay blank until a full
+		// navigation reload. Bail out and let the effect re-run when userIdTick bumps.
+		if (!userId) return;
 		const tsOf = (t: Thesis) => Date.parse(t.meta.updated_at) || Date.parse(t.meta.created_at) || 0;
 
 		const voted = source
