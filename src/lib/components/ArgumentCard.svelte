@@ -230,13 +230,16 @@
 	<p class="argument-content">{active.content}</p>
 
 	<div class="argument-meta">
-		<span class="evidence evidence-{primaryEvidence}" title="Evidence type (auto-detected)">
-			{primaryEvidence}
-		</span>
-		{#if active.categories && active.categories.length > 0}
-			{#each active.categories as cat}
-				<span class="arg-cat" title="Topic (auto-categorised)">{cat}</span>
-			{/each}
+		{#if primaryEvidence || (active.categories && active.categories.length > 0)}
+			<span class="meta-labels">
+				<span class="evidence" title="Evidence type (auto-detected)">{primaryEvidence}</span>
+				{#if active.categories && active.categories.length > 0}
+					{#each active.categories as cat}
+						<span class="meta-sep">·</span>
+						<span class="arg-cat" title="Topic (auto-categorised)">{cat}</span>
+					{/each}
+				{/if}
+			</span>
 		{/if}
 		{#if active.hashtags && active.hashtags.length > 0}
 			{#each active.hashtags as tag}
@@ -251,7 +254,7 @@
 							href={s.url}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="source-link evidence-{s.type}"
+							class="source-link"
 							title={s.url}
 						>
 							<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
@@ -629,32 +632,32 @@
 		align-items: center;
 	}
 
-	.evidence {
+	/* Evidence type + auto-category are annotations, not actions — quiet them to
+	   a single borderless micro-label group so the argument content leads and the
+	   only filled/interactive chrome left in this row is content (hashtags) or
+	   navigation (source links). */
+	.meta-labels {
 		display: inline-flex;
-		align-items: center;
-		padding: 0.125rem 0.5rem;
-		font-size: var(--text-xs);
-		font-weight: 500;
-		border-radius: var(--radius-sm);
-		text-transform: capitalize;
-		border: 1px solid transparent;
+		align-items: baseline;
+		gap: 0.3rem;
+		font-size: 0.62rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-text-light);
 	}
 
-	.evidence-study        { background: #dcfce7; color: #14532d; border-color: #86efac; }
-	.evidence-authority    { background: #ede9fe; color: #4c1d95; border-color: #c4b5fd; }
-	.evidence-experiential { background: #ffedd5; color: #7c2d12; border-color: #fdba74; }
-	.evidence-logical      { background: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+	.meta-sep {
+		color: var(--color-text-light);
+		opacity: 0.6;
+	}
+
+	.evidence {
+		color: var(--color-text-muted);
+	}
 
 	.arg-cat {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.125rem 0.5rem;
-		font-size: var(--text-xs);
-		font-weight: 500;
-		border-radius: var(--radius-sm);
-		background: var(--color-bg);
-		color: var(--color-text-muted);
-		border: 1px solid var(--color-border);
+		color: var(--color-text-light);
 	}
 
 	.arg-hashtag {
