@@ -163,7 +163,7 @@
 		font-size: var(--text-sm);
 		font-weight: 600;
 		line-height: 1;
-		border: 1.5px solid;
+		border: 2px solid;
 		cursor: pointer;
 		transition: all var(--transition-fast);
 	}
@@ -174,7 +174,7 @@
 		padding: 0 0.65rem;
 		font-size: var(--text-sm);
 		gap: 0.3rem;
-		border-width: 1.5px;
+		border-width: 2px;
 	}
 
 	/* WCAG 2.1 / Apple HIG: min 44×44px touch target on mobile */
@@ -202,9 +202,11 @@
 		cursor: not-allowed;
 	}
 
-	/* At-rest: colored tint with the color as text (fresh, readable). */
-	.vb-support { color: var(--color-support); background: var(--color-support-bg); border-color: var(--color-support-border); }
-	.vb-reject  { color: var(--color-reject);  background: var(--color-reject-bg);  border-color: var(--color-reject-border); }
+	/* At-rest: colored tint with the color as text (fresh, readable). The tint
+	   is mixed toward the accent so the buttons carry real weight against the
+	   card surface — they are the card's primary action, not a footnote. */
+	.vb-support { color: var(--color-support); background: color-mix(in srgb, var(--color-support) 14%, white); border-color: color-mix(in srgb, var(--color-support) 45%, transparent); }
+	.vb-reject  { color: var(--color-reject);  background: color-mix(in srgb, var(--color-reject) 14%, white);  border-color: color-mix(in srgb, var(--color-reject) 45%, transparent); }
 	.vb-neutral { color: var(--color-neutral); background: var(--color-neutral-bg); border-color: var(--color-neutral-border); }
 
 	/* Active: full color fill, white text. */
