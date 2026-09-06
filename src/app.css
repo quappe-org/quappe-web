@@ -590,6 +590,24 @@ label {
 	}
 }
 
+/* Horizontal-scroll affordance. Add to any row that scrolls sideways (filter
+   chips, hashtag rows): a soft edge fade appears on whichever side still has
+   off-screen content, so the row visibly reads as "there's more this way".
+   Pure CSS: the two fades are painted in --color-bg with
+   background-attachment:local, so they only show while the row is actually
+   overflowing on that side (and scroll away once you reach that end).
+   No hard shadow layer — a black halo would invert to a bright halo under
+   the invert accessibility mode; a plain bg-coloured fade inverts cleanly. */
+.scroll-x-fade {
+	background-image:
+		linear-gradient(to right, var(--color-bg), transparent),
+		linear-gradient(to left, var(--color-bg), transparent);
+	background-position: left center, right center;
+	background-size: 2.4rem 100%, 2.4rem 100%;
+	background-repeat: no-repeat;
+	background-attachment: local, local;
+}
+
 /* Stack (vertical spacing) */
 .stack {
 	display: flex;

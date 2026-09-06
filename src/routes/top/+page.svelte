@@ -145,7 +145,7 @@
 				</button>
 			{/if}
 		</div>
-		<div class="category-tiles">
+		<div class="category-tiles scroll-x-fade">
 			{#each categoryTiles as tile}
 				<button
 					class="cat-tile"
@@ -159,7 +159,7 @@
 			{/each}
 		</div>
 		{#if hashtagTiles.length > 0}
-			<div class="hashtag-tiles">
+			<div class="hashtag-tiles scroll-x-fade">
 				{#each hashtagTiles as tag}
 					<button
 						class="hashtag-chip"
