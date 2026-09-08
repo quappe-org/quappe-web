@@ -15,6 +15,8 @@
 		variants: Argument[];
 		all: Argument[];
 		groupScore: number;
+		/** Set when this group is a linked thesis rendered as an argument. */
+		linked?: ThesisEdgeHydrated;
 	}
 
 	type OpinionView = 'all' | 'supporters' | 'rejecters';
@@ -23,8 +25,6 @@
 		topGroups: ArgGroup[];
 		poolGroups: ArgGroup[];
 		totalArguments: number;
-		/** Theses linked onto this thesis "as arguments" — rendered atop the list. */
-		linkedTheses: ThesisEdgeHydrated[];
 		pendingReorderCount: number;
 		complexityCapped: boolean;
 		opinionView: OpinionView;
@@ -43,7 +43,6 @@
 		topGroups,
 		poolGroups,
 		totalArguments,
-		linkedTheses,
 		pendingReorderCount,
 		complexityCapped,
 		opinionView,
@@ -69,8 +68,8 @@
 
 	let visibleTop = $derived(topGroups.filter((g) => !ignoredIds.has(g.root.id)));
 	let visiblePool = $derived(poolGroups.filter((g) => !ignoredIds.has(g.root.id)));
-	// Linked theses count as arguments in the tally (a thesis IS an argument here).
-	let visibleTotal = $derived(totalArguments - ignoredIds.size + linkedTheses.length);
+	// totalArguments already counts linked theses (they are groups in the list).
+	let visibleTotal = $derived(totalArguments - ignoredIds.size);
 
 	let uid = $derived(getUserId());
 
@@ -166,6 +165,73 @@
 	}
 </script>
 
+<!-- One row for either a native argument (fork family) or a linked thesis. Both
+     go through the same ranked/capped list so a linked thesis behaves and is
+     limited exactly like an argument. -->
+{#snippet groupRow(g: ArgGroup, idx: number)}
+	{#if g.linked}
+		<div class="arg-row">
+			<SwipeVote
+				onSwipeRight={() => castLinkedSwipe(g.root, 'support')}
+				onSwipeLeft={() => castLinkedSwipe(g.root, 'reject')}
+				allowNeutral={false}
+				positiveLabel={m.vote_agree()}
+				negativeLabel={m.vote_disagree()}
+				heldVote={currentVoteOf(g.root)}
+				heldWeight={currentWeightOf(g.root)}
+			>
+				<div class="linked-tile">
+					<a class="linked-tile-head" href="/thesis/{g.linked.thesis.id}">
+						<span class="linked-badge">
+							<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+							{m.linked_thesis_badge()}
+						</span>
+						<span class="linked-tile-title">{g.linked.thesis.title}</span>
+						<LifecycleIcon state={g.linked.thesis.lifecycle.state} />
+					</a>
+					<div class="linked-tile-vote">
+						<VoteRow
+							summary={summaryOf(g.root)}
+							currentVote={currentVoteOf(g.root)}
+							currentWeight={currentWeightOf(g.root)}
+							voting={votingId === g.root.id}
+							compact
+							hideNeutral
+							agreeMode
+							oncast={(type, weight) => castLinkedVote(g.root, type, weight)}
+						/>
+					</div>
+				</div>
+			</SwipeVote>
+			{#if g.linked.edge.author_id === uid}
+				<button
+					class="ignore-btn"
+					onclick={() => onunlink(g.linked!.edge.source_thesis_id)}
+					title={m.linked_thesis_remove()}
+					aria-label={m.linked_thesis_remove()}
+				>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+				</button>
+			{/if}
+		</div>
+	{:else}
+		<div class="arg-row">
+			<ArgumentCard
+				argument={g.root}
+				leading={idx === 0}
+				variants={g.variants}
+				{hasThesisVote}
+				onFork={onfork}
+				onEdit={onedit}
+				onNeedThesisVote={onneedthesisvote}
+			/>
+			<button class="ignore-btn" onclick={() => ignore(g.root.id)} title="Ausblenden" aria-label="Argument ausblenden">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+			</button>
+		</div>
+	{/if}
+{/snippet}
+
 {#if pendingReorderCount > 0}
 	<button
 		type="button"
@@ -199,82 +265,10 @@
 		<button class="segmented-btn" class:active={opinionView === 'rejecters'} onclick={() => onopinionchange('rejecters')}>{m.opinion_view_rejecters()}</button>
 	</div>
 	<div class="arguments-list">
-		{#each linkedTheses as item (item.edge.id)}
-			<div class="arg-row">
-				{#if item.argument}
-					<SwipeVote
-						onSwipeRight={() => castLinkedSwipe(item.argument!, 'support')}
-						onSwipeLeft={() => castLinkedSwipe(item.argument!, 'reject')}
-						allowNeutral={false}
-						positiveLabel={m.vote_agree()}
-						negativeLabel={m.vote_disagree()}
-						heldVote={currentVoteOf(item.argument)}
-						heldWeight={currentWeightOf(item.argument)}
-					>
-						<div class="linked-tile">
-							<a class="linked-tile-head" href="/thesis/{item.thesis.id}">
-								<span class="linked-badge">
-									<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
-									{m.linked_thesis_badge()}
-								</span>
-								<span class="linked-tile-title">{item.thesis.title}</span>
-								<LifecycleIcon state={item.thesis.lifecycle.state} />
-							</a>
-							<div class="linked-tile-vote">
-								<VoteRow
-									summary={summaryOf(item.argument)}
-									currentVote={currentVoteOf(item.argument)}
-									currentWeight={currentWeightOf(item.argument)}
-									voting={votingId === item.argument.id}
-									compact
-									hideNeutral
-									agreeMode
-									oncast={(type, weight) => castLinkedVote(item.argument!, type, weight)}
-								/>
-							</div>
-						</div>
-					</SwipeVote>
-				{:else}
-					<div class="linked-tile">
-						<a class="linked-tile-head" href="/thesis/{item.thesis.id}">
-							<span class="linked-badge">
-								<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
-								{m.linked_thesis_badge()}
-							</span>
-							<span class="linked-tile-title">{item.thesis.title}</span>
-							<LifecycleIcon state={item.thesis.lifecycle.state} />
-						</a>
-					</div>
-				{/if}
-				{#if item.edge.author_id === uid}
-					<button
-						class="ignore-btn"
-						onclick={() => onunlink(item.edge.source_thesis_id)}
-						title={m.linked_thesis_remove()}
-						aria-label={m.linked_thesis_remove()}
-					>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-					</button>
-				{/if}
-			</div>
-		{/each}
 		{#each visibleTop as g, idx (g.root.id)}
-			<div class="arg-row">
-				<ArgumentCard
-					argument={g.root}
-					leading={idx === 0 && linkedTheses.length === 0}
-					variants={g.variants}
-					{hasThesisVote}
-					onFork={onfork}
-					onEdit={onedit}
-					onNeedThesisVote={onneedthesisvote}
-				/>
-				<button class="ignore-btn" onclick={() => ignore(g.root.id)} title="Ausblenden" aria-label="Argument ausblenden">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-				</button>
-			</div>
+			{@render groupRow(g, idx)}
 		{/each}
-		{#if visibleTop.length === 0 && linkedTheses.length === 0}
+		{#if visibleTop.length === 0}
 			<p class="col-empty">{m.argcol_empty_support()}</p>
 		{/if}
 	</div>
@@ -290,19 +284,7 @@
 	{:else}
 		<ul class="argument-pool-list">
 			{#each visiblePool as g (g.root.id)}
-				<li class="argument-pool-item arg-row">
-				<ArgumentCard
-					argument={g.root}
-					variants={g.variants}
-					{hasThesisVote}
-					onFork={onfork}
-					onEdit={onedit}
-					onNeedThesisVote={onneedthesisvote}
-				/>
-				<button class="ignore-btn" onclick={() => ignore(g.root.id)} title="Ausblenden" aria-label="Argument ausblenden">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-				</button>
-				</li>
+				<li class="argument-pool-item">{@render groupRow(g, 1)}</li>
 			{/each}
 		</ul>
 	{/if}

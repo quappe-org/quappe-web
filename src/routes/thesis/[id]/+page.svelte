@@ -72,11 +72,16 @@
 	});
 
 	// --- Argument groups (fork families) ---
+	// A group is either a native argument (fork family) or a linked thesis. Both
+	// share the ranking/slicing pipeline so a linked thesis is capped by the
+	// complexity slider exactly like an argument (objects behave identically).
 	interface ArgGroup {
 		root: Argument;
 		variants: Argument[];
 		all: Argument[];
 		groupScore: number;
+		/** Set when this group is a linked thesis rendered as an argument. */
+		linked?: ThesisEdgeHydrated;
 	}
 
 	let argIndex = $derived.by(() => {
@@ -125,7 +130,20 @@
 			g.groupScore = g.all.reduce((s, a) => s + scoreOf(a), 0);
 			g.variants.sort((a, b) => scoreOf(b) - scoreOf(a));
 		}
-		return [...groups.values()];
+		const list = [...groups.values()];
+		// Linked theses join the same list as one-member groups keyed by their
+		// companion argument, so they rank and cap identically to arguments.
+		for (const l of linkedTheses) {
+			if (!l.argument) continue;
+			list.push({
+				root: l.argument,
+				variants: [],
+				all: [l.argument],
+				groupScore: scoreOf(l.argument),
+				linked: l
+			});
+		}
+		return list;
 	});
 
 	// Frozen display order
@@ -257,6 +275,9 @@
 
 	function groupMatchesView(g: ArgGroup): boolean {
 		if (opinionView === 'all') return true;
+		// Linked theses carry a direct vote, not an argument-approval classification,
+		// so they stay visible in every opinion view rather than being filtered out.
+		if (g.linked) return true;
 		for (const a of g.all) {
 			const ap = approvals.get(a.id);
 			if (!ap || ap.total_approvers === 0) continue;
@@ -712,7 +733,6 @@
 				{topGroups}
 				{poolGroups}
 				{totalArguments}
-				{linkedTheses}
 				{pendingReorderCount}
 				complexityCapped={argGroups.length > topGroups.length + poolGroups.length}
 				{opinionView}
