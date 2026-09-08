@@ -404,6 +404,8 @@
 	"home_create_variants_draft": "Draft with AI",
 	"home_create_variants_drafting": "Drafting …",
 	"home_create_variants_error": "AI draft unavailable — the local LLM (Ollama) isn't running right now. You can type the variants by hand.",
+	"home_create_variant_drift_warning": "This wording drifts from your original meaning. Please bring it closer before saving.",
+	"error_register_drift": "A reading variant differs too much from your description. Adjust it and try again.",
 	"about_nav_intro": "Overview",
 	"about_nav_lifecycle": "Lifecycle",
 	"about_nav_heat": "Heat",

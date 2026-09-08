@@ -404,6 +404,8 @@
 	"home_create_variants_draft": "Borrador con IA",
 	"home_create_variants_drafting": "Redactando …",
 	"home_create_variants_error": "Borrador con IA no disponible — el LLM local (Ollama) no está en ejecución. Puedes escribir las variantes a mano.",
+	"home_create_variant_drift_warning": "Esta redacción se aleja del significado original. Acércala antes de guardar.",
+	"error_register_drift": "Una variante de lectura difiere demasiado de tu descripción. Ajústala e inténtalo de nuevo.",
 	"about_nav_intro": "Resumen",
 	"about_nav_lifecycle": "Ciclo de vida",
 	"about_nav_heat": "Calor",

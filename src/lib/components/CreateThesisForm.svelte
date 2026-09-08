@@ -35,6 +35,11 @@
 	let descriptionDense = $state('');
 	let drafting = $state(false);
 	let draftError = $state<string | null>(null);
+	// Drift flags from the last AI draft: true = the drafted wording strayed too
+	// far from the prose meaning. Advisory here (author can still edit); the
+	// server enforces the hard block on submit.
+	let simpleDrifted = $state(false);
+	let denseDrifted = $state(false);
 
 	let similarExisting = $state<Thesis[]>([]);
 	let similarLoading = $state(false);
@@ -59,12 +64,14 @@
 				})
 			]);
 			if (simpleRes.ok) {
-				const d = (await simpleRes.json()) as { description: string };
+				const d = (await simpleRes.json()) as { description: string; drift?: { ok: boolean } };
 				descriptionSimple = d.description;
+				simpleDrifted = d.drift ? !d.drift.ok : false;
 			}
 			if (denseRes.ok) {
-				const d = (await denseRes.json()) as { description: string };
+				const d = (await denseRes.json()) as { description: string; drift?: { ok: boolean } };
 				descriptionDense = d.description;
+				denseDrifted = d.drift ? !d.drift.ok : false;
 			}
 			// The draft endpoint 503s when the local LLM (Ollama) is down. Without
 			// this the button just spins-then-nothing, leaving the user guessing.
@@ -138,6 +145,8 @@
 					createError = m.error_too_many_requests();
 				} else if (res.status === 413) {
 					createError = m.error_text_too_long();
+				} else if (res.status === 422) {
+					createError = m.error_register_drift();
 				} else if (res.status === 400) {
 					const body = await res.json().catch(() => ({}));
 					createError = body?.error ?? m.error_invalid_input();
@@ -187,6 +196,8 @@
 			similarExisting = [];
 			descriptionSimple = '';
 			descriptionDense = '';
+			simpleDrifted = false;
+			denseDrifted = false;
 			showVariants = false;
 			onclose();
 		} catch {
@@ -300,12 +311,18 @@
 
 				<div class="variant-block">
 					<span class="variant-block-title">{m.rephrase_simple()}</span>
-					<textarea use:autogrow bind:value={descriptionSimple} placeholder={m.home_create_desc_placeholder()} maxlength="2000"></textarea>
+					<textarea use:autogrow bind:value={descriptionSimple} oninput={() => (simpleDrifted = false)} placeholder={m.home_create_desc_placeholder()} maxlength="2000"></textarea>
+					{#if simpleDrifted}
+						<p class="variant-drift-warning" role="alert">{m.home_create_variant_drift_warning()}</p>
+					{/if}
 				</div>
 
 				<div class="variant-block">
 					<span class="variant-block-title">{m.rephrase_dense()}</span>
-					<textarea use:autogrow bind:value={descriptionDense} placeholder={m.home_create_desc_placeholder()} maxlength="2000"></textarea>
+					<textarea use:autogrow bind:value={descriptionDense} oninput={() => (denseDrifted = false)} placeholder={m.home_create_desc_placeholder()} maxlength="2000"></textarea>
+					{#if denseDrifted}
+						<p class="variant-drift-warning" role="alert">{m.home_create_variant_drift_warning()}</p>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -564,6 +581,17 @@
 		color: var(--color-text-muted);
 		background: var(--color-bg);
 		border: 1px dashed var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 0.4rem 0.6rem;
+	}
+
+	.variant-drift-warning {
+		margin: 0.35rem 0 0;
+		font-size: var(--text-xs);
+		line-height: 1.5;
+		color: var(--color-reject);
+		background: var(--color-reject-bg);
+		border: 1px solid var(--color-reject);
 		border-radius: var(--radius-sm);
 		padding: 0.4rem 0.6rem;
 	}

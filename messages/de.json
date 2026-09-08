@@ -404,6 +404,8 @@
 	"home_create_variants_draft": "Mit KI entwerfen",
 	"home_create_variants_drafting": "Entwerfe …",
 	"home_create_variants_error": "KI-Entwurf nicht verfügbar — das lokale LLM (Ollama) läuft gerade nicht. Du kannst die Varianten von Hand eingeben.",
+	"home_create_variant_drift_warning": "Diese Formulierung weicht vom ursprünglichen Sinn ab. Bitte bring sie vor dem Speichern näher heran.",
+	"error_register_drift": "Eine Lesevariante weicht zu stark von deiner Beschreibung ab. Passe sie an und versuche es erneut.",
 	"about_nav_intro": "Überblick",
 	"about_nav_lifecycle": "Lebenszyklus",
 	"about_nav_heat": "Hitze",

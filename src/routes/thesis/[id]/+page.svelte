@@ -402,6 +402,13 @@
 	let editDescription = $state('');
 	let editCategories = $state<Category[]>([]);
 	let editSubmitting = $state(false);
+	let editError = $state<string | null>(null);
+	// Register variants in the edit form (author-owned; server drift-checks on save).
+	let editDescriptionSimple = $state('');
+	let editDescriptionDense = $state('');
+	let editSimpleDrifted = $state(false);
+	let editDenseDrifted = $state(false);
+	let editDrafting = $state(false);
 
 	// --- Translation ---
 	let translated = $state<{ title: string; description: string } | null>(null);
@@ -449,6 +456,11 @@
 		editTitle = thesis.title;
 		editDescription = thesis.description;
 		editCategories = [...thesis.categories];
+		editDescriptionSimple = thesis.description_simple ?? '';
+		editDescriptionDense = thesis.description_dense ?? '';
+		editSimpleDrifted = false;
+		editDenseDrifted = false;
+		editError = null;
 		editingThesis = true;
 	}
 
@@ -457,9 +469,45 @@
 		else editCategories = [...editCategories, cat];
 	}
 
+	async function draftEditVariants() {
+		if (!editTitle.trim() || !editDescription.trim()) return;
+		editDrafting = true;
+		editError = null;
+		try {
+			const [simpleRes, denseRes] = await Promise.all([
+				fetch('/api/theses/draft-variant', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ title: editTitle.trim(), description: editDescription.trim(), variant: 'simple' })
+				}),
+				fetch('/api/theses/draft-variant', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ title: editTitle.trim(), description: editDescription.trim(), variant: 'dense' })
+				})
+			]);
+			if (simpleRes.ok) {
+				const d = (await simpleRes.json()) as { description: string; drift?: { ok: boolean } };
+				editDescriptionSimple = d.description;
+				editSimpleDrifted = d.drift ? !d.drift.ok : false;
+			}
+			if (denseRes.ok) {
+				const d = (await denseRes.json()) as { description: string; drift?: { ok: boolean } };
+				editDescriptionDense = d.description;
+				editDenseDrifted = d.drift ? !d.drift.ok : false;
+			}
+			if (!simpleRes.ok && !denseRes.ok) editError = m.home_create_variants_error();
+		} catch {
+			editError = m.home_create_variants_error();
+		} finally {
+			editDrafting = false;
+		}
+	}
+
 	async function submitEditThesis() {
 		if (!thesis) return;
 		editSubmitting = true;
+		editError = null;
 		try {
 			const res = await fetch(`/api/theses/${thesis.id}`, {
 				method: 'PUT',
@@ -468,6 +516,9 @@
 					title: editTitle.trim(),
 					description: editDescription.trim(),
 					categories: editCategories,
+					// Empty string clears the variant (falls back to prose for that reader).
+					description_simple: editDescriptionSimple.trim() || '',
+					description_dense: editDescriptionDense.trim() || '',
 					user_id: getUserId()
 				})
 			});
@@ -475,6 +526,10 @@
 				const updated = await res.json();
 				thesis = { ...thesis, ...updated };
 				editingThesis = false;
+			} else if (res.status === 422) {
+				editError = m.error_register_drift();
+			} else {
+				editError = m.error_server_generic({ status: res.status });
 			}
 		} finally {
 			editSubmitting = false;
@@ -547,6 +602,27 @@
 							{/each}
 						</div>
 					</div>
+					<div class="form-group edit-variants">
+						<span class="edit-variants-hint">{m.home_create_variants_hint()}</span>
+						<div>
+							<button type="button" class="btn btn-sm" disabled={editDrafting || !editTitle.trim() || !editDescription.trim()} onclick={draftEditVariants}>
+								{editDrafting ? m.home_create_variants_drafting() : m.home_create_variants_draft()}
+							</button>
+						</div>
+						<label for="edit-desc-simple">{m.rephrase_simple()}</label>
+						<textarea id="edit-desc-simple" bind:value={editDescriptionSimple} oninput={() => (editSimpleDrifted = false)} maxlength="2000"></textarea>
+						{#if editSimpleDrifted}
+							<p class="edit-drift-warning" role="alert">{m.home_create_variant_drift_warning()}</p>
+						{/if}
+						<label for="edit-desc-dense">{m.rephrase_dense()}</label>
+						<textarea id="edit-desc-dense" bind:value={editDescriptionDense} oninput={() => (editDenseDrifted = false)} maxlength="2000"></textarea>
+						{#if editDenseDrifted}
+							<p class="edit-drift-warning" role="alert">{m.home_create_variant_drift_warning()}</p>
+						{/if}
+					</div>
+					{#if editError}
+						<p class="edit-drift-warning" role="alert">{editError}</p>
+					{/if}
 					<div class="form-actions">
 						<button class="btn btn-primary" type="submit" disabled={editSubmitting}>
 							{editSubmitting ? m.thesis_edit_saving() : m.thesis_edit_save()}
@@ -1024,6 +1100,28 @@
 	.form-actions {
 		display: flex;
 		gap: 0.5rem;
+	}
+
+	.edit-variants {
+		border-top: 1px dashed var(--color-border);
+		padding-top: 0.6rem;
+	}
+
+	.edit-variants-hint {
+		font-size: var(--text-xs);
+		color: var(--color-text-muted);
+		line-height: 1.5;
+	}
+
+	.edit-drift-warning {
+		margin: 0.35rem 0 0;
+		font-size: var(--text-xs);
+		line-height: 1.5;
+		color: var(--color-reject);
+		background: var(--color-reject-bg);
+		border: 1px solid var(--color-reject);
+		border-radius: var(--radius-sm);
+		padding: 0.4rem 0.6rem;
 	}
 
 	.category-grid {

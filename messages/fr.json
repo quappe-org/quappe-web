@@ -404,6 +404,8 @@
 	"home_create_variants_draft": "Brouillon par IA",
 	"home_create_variants_drafting": "Rédaction …",
 	"home_create_variants_error": "Brouillon IA indisponible — le LLM local (Ollama) n'est pas en cours d'exécution. Vous pouvez saisir les variantes à la main.",
+	"home_create_variant_drift_warning": "Cette formulation s'éloigne du sens original. Rapprochez-la avant d'enregistrer.",
+	"error_register_drift": "Une variante de lecture diffère trop de votre description. Ajustez-la et réessayez.",
 	"about_nav_intro": "Aperçu",
 	"about_nav_lifecycle": "Cycle de vie",
 	"about_nav_heat": "Chaleur",
