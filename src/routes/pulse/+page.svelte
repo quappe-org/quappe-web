@@ -21,11 +21,15 @@
 	// The pulse bundles a (potentially slow) LLM call, so it's fetched here
 	// client-side instead of blocking navigation in load(). A warm 24h cache
 	// hit returns near-instantly; a cold call shows the spinner meanwhile.
+	// Reading max_arguments here makes the effect re-run when the amount slider
+	// moves, so the text density follows the slider live. The server owns the
+	// register mapping — we only forward the raw value (presentation only).
 	$effect(() => {
+		const register = complexityStore.settings.max_arguments;
 		let cancelled = false;
 		loading = true;
 		loadError = null;
-		fetch('/api/reports/pulse')
+		fetch(`/api/reports/pulse?register=${register}`)
 			.then(async (res) => {
 				if (cancelled) return;
 				if (!res.ok) {
@@ -49,7 +53,8 @@
 		refreshing = true;
 		loadError = null;
 		try {
-			const res = await fetch('/api/reports/pulse?force=true');
+			const register = complexityStore.settings.max_arguments;
+			const res = await fetch(`/api/reports/pulse?force=true&register=${register}`);
 			if (!res.ok) {
 				loadError = m.pulse_server_error({ status: res.status });
 				return;

@@ -3,6 +3,7 @@
 	import { getUserId } from '$lib/stores/user';
 	import { userIdTick } from '$lib/stores/user-tick.svelte';
 	import { activityStore } from '$lib/stores/activity.svelte';
+	import { complexityStore } from '$lib/stores/complexity.svelte';
 	import ThesisCard from '$lib/components/ThesisCard.svelte';
 	import ScrollSentinel from '$lib/components/ScrollSentinel.svelte';
 	import { m } from '$lib/paraglide/messages';
@@ -180,6 +181,9 @@
 		try {
 			const qs = new URLSearchParams();
 			if (force) qs.set('force', 'true');
+			// Forward the raw amount-slider value; the server maps it to a density
+			// register (no register logic on the client — presentation only).
+			qs.set('register', String(complexityStore.settings.max_arguments));
 			const suffix = qs.toString() ? `?${qs.toString()}` : '';
 			const res = await fetch(`/api/reports/me${suffix}`);
 			if (!res.ok) {
