@@ -374,6 +374,34 @@
 		opacity: 0.6;
 	}
 
+	/* Mobile: the header's title + add-arg button no longer share a cramped row.
+	   The button drops to its own full-width line as the clear primary action
+	   (labelled, tinted, 44px tap target), and the opinion filter gets a taller
+	   touch target so the three tabs are comfortable to hit on a phone. */
+	@media (max-width: 768px) {
+		.col-header {
+			flex-wrap: wrap;
+		}
+		.col-title {
+			flex: 1;
+		}
+		.add-arg-btn {
+			flex-basis: 100%;
+			min-height: 44px;
+			font-size: var(--text-sm);
+			background: var(--color-primary-bg);
+			border-color: var(--color-primary);
+			color: var(--color-primary);
+		}
+		.add-arg-btn:hover:not(:disabled) {
+			background: var(--color-primary);
+			color: #fff;
+		}
+		.opinion-view :global(.segmented-btn) {
+			min-height: 44px;
+		}
+	}
+
 	.arguments-list {
 		position: relative;
 		display: flex;
