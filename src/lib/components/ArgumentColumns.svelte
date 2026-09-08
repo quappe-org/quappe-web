@@ -180,7 +180,7 @@
 				heldVote={currentVoteOf(g.root)}
 				heldWeight={currentWeightOf(g.root)}
 			>
-				<div class="linked-tile">
+				<article class="argument-card">
 					<a class="linked-tile-head" href="/thesis/{g.linked.thesis.id}">
 						<span class="linked-badge">
 							<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
@@ -189,7 +189,7 @@
 						<span class="linked-tile-title">{g.linked.thesis.title}</span>
 						<LifecycleIcon state={g.linked.thesis.lifecycle.state} />
 					</a>
-					<div class="linked-tile-vote">
+					<div class="argument-footer">
 						<VoteRow
 							summary={summaryOf(g.root)}
 							currentVote={currentVoteOf(g.root)}
@@ -200,19 +200,21 @@
 							agreeMode
 							oncast={(type, weight) => castLinkedVote(g.root, type, weight)}
 						/>
+						{#if g.linked.edge.author_id === uid}
+							<div class="argument-actions">
+								<button
+									class="icon-btn"
+									onclick={() => onunlink(g.linked!.edge.source_thesis_id)}
+									title={m.linked_thesis_remove()}
+									aria-label={m.linked_thesis_remove()}
+								>
+									<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+								</button>
+							</div>
+						{/if}
 					</div>
-				</div>
+				</article>
 			</SwipeVote>
-			{#if g.linked.edge.author_id === uid}
-				<button
-					class="ignore-btn"
-					onclick={() => onunlink(g.linked!.edge.source_thesis_id)}
-					title={m.linked_thesis_remove()}
-					aria-label={m.linked_thesis_remove()}
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-				</button>
-			{/if}
 		</div>
 	{:else}
 		<div class="arg-row">
@@ -389,20 +391,24 @@
 		position: relative;
 	}
 
-	/* A linked thesis rendered inside the argument list. Shares the argument-card
-	   chrome (surface + border + radius + padding) so it reads as a sibling of the
-	   arguments, but carries a "thesis" badge + lifecycle glyph. Unlike a native
-	   argument its display text is the linked thesis title (content is empty), and
-	   it is voted through its companion argument in the footer. */
-	.linked-tile {
-		display: flex;
-		flex-direction: column;
-		gap: 0.6rem;
-		padding: 0.85rem 1rem;
+	/* A linked thesis rendered inside the argument list. It reuses the exact
+	   argument-card chrome + footer so its vote buttons and layout are identical
+	   to a native argument (objects behave/look identically). It differs only in
+	   the head: a "thesis" badge + linked title + lifecycle glyph instead of the
+	   argument content + meta row. */
+	.argument-card {
 		background: var(--color-surface);
 		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		color: var(--color-text);
+		border-radius: var(--radius-md);
+		padding: var(--space-md);
+		transition: box-shadow var(--transition-fast);
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.argument-card:hover {
+		box-shadow: var(--shadow-sm);
 	}
 
 	.linked-tile-head {
@@ -419,9 +425,41 @@
 		color: var(--color-primary);
 	}
 
-	.linked-tile-vote {
+	/* Identical footer to ArgumentCard: vote row + right-aligned action(s),
+	   separated by a hairline top border. */
+	.argument-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
 		padding-top: 0.5rem;
 		border-top: 1px solid var(--color-border);
+		flex-wrap: wrap;
+	}
+
+	.argument-actions {
+		display: inline-flex;
+		gap: 0.25rem;
+	}
+
+	.icon-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border-radius: var(--radius-sm);
+		background: var(--color-bg);
+		border: 1px solid var(--color-border);
+		color: var(--color-text-muted);
+		cursor: pointer;
+		transition: all var(--transition-fast);
+	}
+
+	.icon-btn:hover {
+		color: var(--color-reject);
+		border-color: var(--color-reject);
+		background: var(--color-reject-bg);
 	}
 
 	.linked-badge {
