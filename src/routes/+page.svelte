@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Thesis, Category } from '$lib/models/types';
 	import { complexityStore } from '$lib/stores/complexity.svelte';
-	import { categoriesStore } from '$lib/stores/categories.svelte';
+	import { categoriesStore, categoryLabel } from '$lib/stores/categories.svelte';
 	import { activityStore } from '$lib/stores/activity.svelte';
 	import { budgetStore } from '$lib/stores/budget.svelte';
 	import { uiIntents } from '$lib/stores/ui.svelte';
@@ -34,6 +34,14 @@
 		heat = data.heat ?? {};
 		argumentCounts = data.argumentCounts ?? {};
 		activityStore.set([], '');
+		// Feed filter tiles reflect the categories actually present (imported repo
+		// names + domain topics). Empty DB → keep the DEFAULT_CATEGORIES fallback so
+		// the create form still offers topics.
+		if (data.categories && data.categories.length > 0) {
+			categoriesStore.set(data.categories);
+		} else {
+			categoriesStore.reset();
+		}
 	});
 
 	// Frozen set of theses the user had ALREADY voted on at page load. We hide
@@ -99,6 +107,10 @@
 	// ---- Filter ----
 	let selectedFilter = $state<Category | null>(null);
 	let selectedHashtag = $state<string | null>(null);
+	// Heat is a server-provided signal (data.heat, per thesis id). This toggle is
+	// pure visualization: when on, the feed/list orders by heat descending instead
+	// of by recency — no client-side heat computation.
+	let heatSort = $state(false);
 
 	let categoryCounts = $derived.by(() => {
 		const counts = new Map<Category, number>();
@@ -194,7 +206,14 @@
 			items.push({ kind: 'new_thesis', at: t.meta.created_at, sortKey: created, thesis: t });
 		}
 
-		items.sort((a, b) => b.sortKey - a.sortKey);
+		if (heatSort) {
+			// Order by server heat (thesis items only carry it; update-groups have
+			// none → treated as 0 and fall below). Recency breaks ties.
+			const heatOf = (it: FeedItem) => (it.kind === 'new_thesis' ? (heat[it.thesis.id] ?? 0) : 0);
+			items.sort((a, b) => heatOf(b) - heatOf(a) || b.sortKey - a.sortKey);
+		} else {
+			items.sort((a, b) => b.sortKey - a.sortKey);
+		}
 		return items;
 	});
 
@@ -257,6 +276,7 @@
 		if (selectedFilter) filtered = filtered.filter((t) => t.categories.includes(selectedFilter!));
 		if (selectedHashtag) filtered = filtered.filter((t) => (t.hashtags ?? []).includes(selectedHashtag!));
 		filtered = filtered.filter((t) => !alreadyVoted.has(t.id));
+		if (heatSort) filtered = [...filtered].sort((a, b) => (heat[b.id] ?? 0) - (heat[a.id] ?? 0));
 		return filtered.slice(0, complexityStore.settings.max_theses);
 	});
 
@@ -393,7 +413,7 @@
 						class:active={selectedFilter === tile.name}
 						onclick={() => (selectedFilter = selectedFilter === tile.name ? null : tile.name)}
 					>
-						<span class="cat-tile-name">{tile.name}</span>
+						<span class="cat-tile-name">{categoryLabel(tile.name)}</span>
 						<span class="cat-tile-count">{tile.count}</span>
 					</button>
 				{/each}
@@ -424,6 +444,21 @@
 				ondismisssuggested={() => { suggestedCategories = []; suggestedForThesis = null; }}
 			/>
 		</Popup>
+
+		<!-- Feed sort: one heat pill on its own row, styled like the filter pills.
+		     Toggles heat-descending ordering (server signal) vs. the default
+		     recency order. Coexists with category/hashtag filters. -->
+		<div class="feed-sort">
+			<button
+				class="sort-pill heat-pill"
+				class:active={heatSort}
+				aria-pressed={heatSort}
+				onclick={() => (heatSort = !heatSort)}
+			>
+				<svg class="heat-flame" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c1 3 4 4.5 4 8a4 4 0 0 1-8 0c0-1.2.4-2.2 1-3-.2 1 .3 1.9 1 2.3.5-2.2-.5-4.3 2-7.3zM7.5 13.5C7.5 17 9.5 20 12 20s4.5-2.7 4.5-6.2c0 0 .8 1.5.8 3.4A5.3 5.3 0 0 1 12 22a5.3 5.3 0 0 1-5.3-4.8c0-1.9.8-3.7.8-3.7z"/></svg>
+				{m.home_sort_heat()}
+			</button>
+		</div>
 
 		{#if showFeed}
 			<div class="section">
@@ -725,6 +760,50 @@
 		font-size: 0.85em;
 		font-family: var(--font-mono);
 		color: rgba(14, 116, 144, 0.6);
+	}
+
+	/* Feed sort row — the heat pill mirrors .cat-tile chrome so it reads as the
+	   same family of control, but adopts the heat accent when active. */
+	.feed-sort {
+		display: flex;
+		gap: 0.375rem;
+		flex-wrap: wrap;
+	}
+
+	.sort-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		border-radius: 9999px;
+		padding: 0.25rem 0.75rem;
+		cursor: pointer;
+		transition: all var(--transition-fast);
+		font-family: inherit;
+		font-size: var(--text-sm);
+		color: var(--color-text-muted);
+		white-space: nowrap;
+	}
+
+	.sort-pill:hover {
+		border-color: var(--color-heat-warm);
+		color: var(--color-heat-hot);
+	}
+
+	.heat-flame {
+		flex-shrink: 0;
+		color: var(--color-heat-warm);
+	}
+
+	.sort-pill.active {
+		background: var(--color-heat-hot);
+		border-color: var(--color-heat-hot);
+		color: #fff;
+	}
+
+	.sort-pill.active .heat-flame {
+		color: #fff;
 	}
 
 	.empty-state {

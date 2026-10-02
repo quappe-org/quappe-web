@@ -3,13 +3,15 @@ import type { Thesis } from '$lib/models/types';
 import type { ActivityDay } from '$lib/models/contract';
 
 export const load: PageLoad = async ({ fetch }) => {
-	const [thesesRes, statsRes, activityRes] = await Promise.all([
+	const [thesesRes, statsRes, activityRes, categoriesRes] = await Promise.all([
 		fetch('/api/theses?trending=true&limit=200'),
 		fetch('/api/stats'),
-		fetch('/api/activity')
+		fetch('/api/activity'),
+		fetch('/api/categories')
 	]);
 	const theses: Thesis[] = await thesesRes.json();
 	const stats: { heat: Record<string, number>; arguments: Record<string, number> } = await statsRes.json();
 	const activity: ActivityDay[] = await activityRes.json();
-	return { theses, heat: stats.heat, argumentCounts: stats.arguments, activity };
+	const categories: string[] = ((await categoriesRes.json()) as { categories?: string[] }).categories ?? [];
+	return { theses, heat: stats.heat, argumentCounts: stats.arguments, activity, categories };
 };

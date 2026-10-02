@@ -8,6 +8,7 @@
 	import SwipeVote from '$lib/components/SwipeVote.svelte';
 	import LifecycleIcon from '$lib/components/LifecycleIcon.svelte';
 	import { budgetStore } from '$lib/stores/budget.svelte';
+	import { categoryLabel } from '$lib/stores/categories.svelte';
 	import { noticeStore } from '$lib/stores/notice.svelte';
 	import { complexityStore } from '$lib/stores/complexity.svelte';
 	import { registerForComplexity, pickDescription } from '$lib/models/variants';
@@ -184,7 +185,7 @@
 	>
 	<div class="thesis-eyebrow">
 		{#if thesis.categories.length > 0}
-			<span class="eyebrow-cat">{thesis.categories[0]}</span>
+			<span class="eyebrow-cat">{categoryLabel(thesis.categories[0])}</span>
 			<span class="eyebrow-sep">·</span>
 		{/if}
 		<span class="eyebrow-state">
@@ -220,7 +221,7 @@
 
 	<div class="thesis-categories">
 		{#each thesis.categories as category}
-			<span class="tag">{category}</span>
+			<span class="tag">{categoryLabel(category)}</span>
 		{/each}
 	</div>
 
