@@ -284,3 +284,47 @@ pulsing unread badge; the rest are subtle hover/popover transitions. So:
 - Command palette (⌘K) as an ADDITIVE power-user path (not the only way — the
   audience is broad, not developers).
 - PWA / installable wrapper (no native apps; the API allows 3rd-party clients).
+
+
+# Known UI debt (observed 2026-09-25)
+
+Standing issues found in a platform review. Recorded so they aren't
+re-discovered — these are gaps against rules we already hold, not new rules.
+
+## Spacing tokens are bypassed (the "inconsistency" complaint)
+The design tokens exist (`src/app.css`: `--space-xs..2xl`, `--radius-sm..xl`,
+`--shadow-sm..lg`) but several views hardcode raw rem gaps instead of using
+them, which is exactly what the "objects look identical in every view" rule in
+CLAUDE.md forbids:
+- `src/routes/top/+page.svelte` — gaps `1.5rem / 0.75rem / 0.5rem / 0.375rem /
+  0.3rem` (lines ~214–342). Only the `1.5rem` matches `--space-lg`; the rest are
+  ad-hoc.
+- `src/lib/components/ThesisCard.svelte` — ~10 distinct hardcoded gaps
+  (`0.75 / 0.6 / 0.4 / 0.25 / 0.5 / 0.375rem … 1px`, lines ~270–433). No token
+  reuse; the card has no internal spacing rhythm.
+Fix is mechanical (map raw values onto the nearest `--space-*`), but do it as a
+deliberate pass and re-check all views together, per the consistency rule.
+
+## "Doesn't feel 2026" (the dated-feel complaint)
+Not a bug — a token-maturity gap. The editorial/calm direction is intended, but
+the token *values* read ~2023:
+- Radii conservative (`--radius-md: 0.5rem`, `--radius-lg: 0.75rem`); a softer
+  `--radius-xl: 1.1rem` already exists but is barely used on main cards.
+- Shadows muted/flat (`--shadow-md: 0 4px 14px -2px …`); no diffuse depth.
+- No `backdrop-filter`/blur, no layered depth, minimal micro-interaction (only
+  the pulsing unread badge + subtle hover). Calm mode disables the heat glow —
+  the one visual "pop" — entirely.
+A refresh means re-tuning token *values* (larger radii on cards, softer/more
+diffuse shadows, optional subtle depth) — NOT abandoning the calm aesthetic or
+adding motion that fights `prefers-reduced-motion`.
+
+## The "map view" (graffiti-DB) belongs in insight, and is blocked
+The user wants a spatial/graph "map" of theses and their relations. Today only
+`src/lib/components/ActivityGraph.svelte` exists (a 5-day streamgraph); there is
+no graph/map/explore route. Architecturally the map is a `quappe-insight`
+surface, and it is **blocked on the durable event/history store** (see
+`quappe-docs/decisions/durable-event-history.md` +
+`quappe-docs/decisions/observability-scope.md`). A client-side `/explore` graph
+built only on current state is possible as a stopgap, but it would show
+structure without history — decide deliberately before building it here.
+
